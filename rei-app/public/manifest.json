@@ -1,0 +1,23 @@
+{
+  "name": "REI Neural Link",
+  "short_name": "REI",
+  "description": "High-performance AI Messaging Network",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050000",
+  "theme_color": "#050000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1152/1152912.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1152/1152912.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
