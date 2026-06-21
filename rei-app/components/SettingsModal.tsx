@@ -28,7 +28,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [username, setUsername] = useState(currentUser.username);
   const [avatar, setAvatar] = useState(currentUser.avatar);
   const [password, setPassword] = useState(terminalKey);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -37,19 +38,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => setAvatar(reader.result as string);
+    reader.onloadend = () => {
+      const img = new Image();
+      img.onload = () => {
+        const maxSize = 512;
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        setAvatar(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result as string;
+    };
     reader.readAsDataURL(file);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveStatus('saving');
-    await onUpdateProfile({ username, avatar, password });
-    setSaveStatus('success');
-    setTimeout(() => {
-      setSaveStatus('idle');
-      onClose();
-    }, 1000);
+    setErrorMessage(null);
+    try {
+      await onUpdateProfile({ username, avatar, password });
+      setSaveStatus('success');
+      setTimeout(() => {
+        setSaveStatus('idle');
+        onClose();
+      }, 1000);
+    } catch (err: any) {
+      setSaveStatus('error');
+      setErrorMessage(err?.message || 'Failed to save changes.');
+    }
   };
 
   return (
@@ -82,9 +102,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             </div>
           </div>
+          {saveStatus === 'error' && (
+            <p className="text-red-500 text-xs font-bold text-center">{errorMessage}</p>
+          )}
           <button
             type="submit"
-            disabled={saveStatus !== 'idle'}
+            disabled={saveStatus === 'saving' || saveStatus === 'success'}
             className="w-full py-4 bg-red-600 text-white font-black uppercase tracking-widest rounded-2xl disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {saveStatus === 'saving' && <Save size={18} className="animate-spin" />}

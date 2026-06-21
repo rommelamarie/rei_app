@@ -229,7 +229,7 @@ const App: React.FC = () => {
       .from('profiles')
       .update({ avatar: updates.avatar })
       .eq('id', session.user.id);
-    if (error) { console.error(error); return; }
+    if (error) throw error;
     setMyProfile(prev => prev ? { ...prev, avatar: updates.avatar } : prev);
   };
 
