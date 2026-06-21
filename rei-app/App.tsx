@@ -159,15 +159,16 @@ const App: React.FC = () => {
       setAuthStatus('admin');
       return;
     }
-    // Regular user — add to pending requests (shared across devices) & show pending screen
+    // Regular user — open signup, no approval gate. Account is created and
+    // authenticated immediately, shared across devices via Supabase.
     const { error } = await supabase
       .from('registration_requests')
-      .upsert({ username, answer, avatar, status: 'pending' }, { onConflict: 'username' });
+      .upsert({ username, answer, avatar, status: 'approved' }, { onConflict: 'username' });
     if (error) console.error(error);
-    localStorage.setItem('rei_auth_status', 'pending');
+    localStorage.setItem('rei_auth_status', 'authenticated');
     localStorage.setItem('rei_pending_user', username);
     if (avatar) localStorage.setItem('rei_pending_avatar', avatar);
-    setAuthStatus('pending');
+    setAuthStatus('authenticated');
   };
 
   const handleApprove = async (username: string) => {
