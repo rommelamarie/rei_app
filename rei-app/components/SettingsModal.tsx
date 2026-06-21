@@ -33,6 +33,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => setAvatar(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     setSaveStatus('saving');
@@ -55,7 +63,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
         <form onSubmit={handleSave} className="p-8 space-y-6">
           <div className="flex flex-col items-center">
-            <img src={avatar} className="w-24 h-24 rounded-full border-2 border-red-600 p-1 mb-4" alt="Profile" />
+            <div className="relative">
+              <img src={avatar} className="w-24 h-24 rounded-full border-2 border-red-600 p-1 mb-4 object-cover" alt="Profile" />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 p-2.5 bg-red-600 text-white rounded-xl shadow-xl active:scale-90"
+              >
+                <Camera size={16} />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+            </div>
           </div>
           <button type="submit" className="w-full py-4 bg-red-600 text-white font-black uppercase tracking-widest rounded-2xl">Commit Changes</button>
         </form>
