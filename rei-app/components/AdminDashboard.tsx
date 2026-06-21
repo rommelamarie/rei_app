@@ -1,20 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { RegistrationRequest, ActivityLog } from '../types';
-import { 
-  ShieldCheck, UserCheck, UserX, ChevronLeft, Clock, History, 
-  Share2, Copy, Check, Key, Eye, EyeOff, Save, UserMinus, 
-  Activity, Zap, Database, Cpu, Search, SortAsc, SortDesc, Filter,
-  Terminal, AlertTriangle, Info
+import { UserProfile, ActivityLog } from '../types';
+import {
+  ChevronLeft, UserMinus,
+  Activity, Zap, Database, Cpu,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import SpiderLily from './SpiderLily';
 
 interface AdminDashboardProps {
-  requests: RegistrationRequest[];
-  authorizedUsers: RegistrationRequest[];
-  onApprove: (username: string) => void;
-  onReject: (username: string) => void;
-  onKick: (username: string) => void;
+  users: UserProfile[];
+  onKick: (id: string) => void;
   onUpdateKey?: (newKey: string) => void;
   currentKey?: string;
   onBack?: () => void;
@@ -28,17 +23,12 @@ const MOCK_LOGS: ActivityLog[] = [
   { id: '5', timestamp: new Date(Date.now() - 1000 * 60 * 180), user: 'Design Squad', action: 'LINK_REQUEST', detail: 'Group sync initiated', status: 'warning' },
 ];
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
-  requests, 
-  authorizedUsers, 
-  onApprove, 
-  onReject, 
-  onKick, 
-  onUpdateKey, 
-  currentKey, 
-  onBack 
+const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  users,
+  onKick,
+  onBack
 }) => {
-  const [activeTab, setActiveTab] = useState<'requests' | 'active' | 'logs'>('requests');
+  const [activeTab, setActiveTab] = useState<'active' | 'logs'>('active');
   const [logSearch, setLogSearch] = useState('');
   const [logSort, setLogSort] = useState<'newest' | 'oldest'>('newest');
   const [logFilter, setLogFilter] = useState<'all' | 'critical' | 'warning' | 'success' | 'info'>('all');
@@ -46,8 +36,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const filteredLogs = useMemo(() => {
     let result = [...MOCK_LOGS];
     if (logSearch) {
-      result = result.filter(log => 
-        log.user.toLowerCase().includes(logSearch.toLowerCase()) || 
+      result = result.filter(log =>
+        log.user.toLowerCase().includes(logSearch.toLowerCase()) ||
         log.detail.toLowerCase().includes(logSearch.toLowerCase()) ||
         log.action.toLowerCase().includes(logSearch.toLowerCase())
       );
@@ -89,53 +79,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <VitalCard icon={<Cpu size={20}/>} label="Neural Load" value="24.8%" progress={24.8} color="red" />
             <VitalCard icon={<Zap size={20}/>} label="Sync Freq" value="144Hz" progress={85} color="red" />
             <VitalCard icon={<Database size={20}/>} label="Memory Map" value="1.2 TB" progress={40} color="red" />
-             <VitalCard icon={<Activity size={20}/>} label="Active Nodes" value={authorizedUsers.length.toString()} progress={100} color="red" />
+             <VitalCard icon={<Activity size={20}/>} label="Active Nodes" value={users.length.toString()} progress={100} color="red" />
           </div>
 
           <div className="flex border-b border-red-950 gap-8">
-            <TabButton active={activeTab === 'requests'} onClick={() => setActiveTab('requests')} label="Identity Logs" count={requests.length} />
-            <TabButton active={activeTab === 'active'} onClick={() => setActiveTab('active')} label="Network Map" count={authorizedUsers.length} />
+            <TabButton active={activeTab === 'active'} onClick={() => setActiveTab('active')} label="Network Map" count={users.length} />
             <TabButton active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} label="Terminal Audit" />
           </div>
 
           <div className="space-y-6">
-            {activeTab === 'requests' && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {requests.length === 0 ? (
-                  <EmptyState title="Queue Empty" subtitle="No unauthorized identities detected." />
-                ) : (
-                  <div className="grid gap-4">
-                    {requests.map((req, i) => (
-                      <div key={i} className="group bg-[#130303]/80 border border-red-950 p-6 rounded-[2rem] hover:border-red-600/50 transition-all flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div className="flex items-center space-x-6 w-full">
-                          <img src={req.avatar || `https://picsum.photos/seed/${req.username}/200`} className="w-16 h-16 rounded-2xl object-cover border border-red-900/30" alt={req.username} />
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-red-50 font-black text-xl tracking-tighter uppercase">{req.username}</h4>
-                            <p className="text-red-700 text-sm font-medium mt-1 italic">"{req.answer}"</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2 w-full md:w-auto">
-                          <button onClick={() => onApprove(req.username)} className="flex-1 md:w-32 px-6 py-3 bg-red-600 text-white font-black uppercase text-[10px] rounded-xl shadow-lg shadow-red-900/40">Approve</button>
-                          <button onClick={() => onReject(req.username)} className="flex-1 md:w-32 px-6 py-3 bg-[#1a0505] text-red-800 font-black uppercase text-[10px] rounded-xl border border-red-950">Reject</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
             {activeTab === 'active' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
-                {authorizedUsers.map((user, i) => (
-                  <div key={i} className="group bg-[#130303]/80 border border-red-950 p-6 rounded-[2.5rem] flex items-center justify-between">
+                {users.map((user) => (
+                  <div key={user.id} className="group bg-[#130303]/80 border border-red-950 p-6 rounded-[2.5rem] flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       <img src={user.avatar || `https://picsum.photos/seed/${user.username}/200`} className="w-14 h-14 rounded-full object-cover border border-red-900/30" alt={user.username} />
                       <div>
                         <h4 className="text-red-50 font-black text-lg uppercase tracking-tight">{user.username}</h4>
+                        <p className="text-red-700 text-xs font-medium">{user.email}</p>
                       </div>
                     </div>
-                    <button onClick={() => onKick(user.username)} className="p-3 bg-red-950/40 text-red-600 rounded-2xl border border-red-900/30">
+                    <button onClick={() => onKick(user.id)} className="p-3 bg-red-950/40 text-red-600 rounded-2xl border border-red-900/30">
                       <UserMinus size={20} />
                     </button>
                   </div>
@@ -191,13 +155,6 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; label: string;
     {count !== undefined && <span className={`px-2 py-0.5 rounded-full text-[9px] ${active ? 'bg-red-600 text-white' : 'bg-red-950 text-red-800'}`}>{count}</span>}
     {active && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />}
   </button>
-);
-
-const EmptyState: React.FC<{ title: string; subtitle: string }> = ({ title, subtitle }) => (
-  <div className="flex flex-col items-center justify-center py-20 bg-[#130303]/40 border border-dashed border-red-950 rounded-[3rem]">
-    <p className="text-red-50 text-xl font-bold uppercase tracking-tighter">{title}</p>
-    <p className="text-red-900 text-[10px] font-black uppercase tracking-widest mt-2">{subtitle}</p>
-  </div>
 );
 
 export default AdminDashboard;

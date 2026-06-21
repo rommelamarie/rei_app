@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { X, Search, User, MessageSquare, Plus, Check } from 'lucide-react';
-import { RegistrationRequest } from '../types';
+import { UserProfile } from '../types';
 import SpiderLily from './SpiderLily';
 
 interface NewChatModalProps {
   isOpen: boolean;
   onClose: () => void;
-  authorizedUsers: RegistrationRequest[];
+  authorizedUsers: UserProfile[];
   onSelectUser: (username: string, avatar: string) => void;
 }
 

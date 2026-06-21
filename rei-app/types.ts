@@ -48,14 +48,15 @@ export interface ChatSession {
   messages: Message[];
 }
 
-export type AuthStatus = 'unauthenticated' | 'pending' | 'authenticated' | 'admin';
+export type AuthStatus = 'unauthenticated' | 'authenticated' | 'admin';
 
-export interface RegistrationRequest {
+export interface UserProfile {
+  id: string;
   username: string;
-  answer: string;
+  firstName: string;
+  lastName: string;
+  email: string;
   avatar?: string;
-  timestamp: Date;
-  status: 'pending' | 'approved';
 }
 
 export interface ActivityLog {

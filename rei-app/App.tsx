@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { INITIAL_CONTACTS } from './constants';
-import { Contact, Message, AuthStatus, RegistrationRequest, Post } from './types';
+import { Contact, Message, AuthStatus, UserProfile, Post } from './types';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import AuthScreen from './components/AuthScreen';
@@ -13,12 +14,24 @@ import { generateAIResponse } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 
 const MESSAGE_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2550/2550-preview.mp3';
+const DEFAULT_AVATAR = 'https://picsum.photos/seed/user/200';
+
+const mapProfileRow = (row: any): UserProfile => ({
+  id: row.id,
+  username: `${row.first_name} ${row.last_name}`.trim(),
+  firstName: row.first_name,
+  lastName: row.last_name,
+  email: row.email,
+  avatar: row.avatar,
+});
 
 const App: React.FC = () => {
-  const [authStatus, setAuthStatus] = useState<AuthStatus>(() => {
-    const saved = localStorage.getItem('rei_auth_status');
-    return (saved as AuthStatus) || 'unauthenticated';
-  });
+  const [isAdminLocal, setIsAdminLocal] = useState(
+    () => localStorage.getItem('rei_auth_status') === 'admin'
+  );
+  const [session, setSession] = useState<Session | null>(null);
+  const [myProfile, setMyProfile] = useState<UserProfile | null>(null);
+  const authStatus: AuthStatus = isAdminLocal ? 'admin' : session ? 'authenticated' : 'unauthenticated';
 
   const [showNeuralOverlay, setShowNeuralOverlay] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -32,9 +45,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('rei_dynamic_contacts');
     return saved ? JSON.parse(saved) : INITIAL_CONTACTS;
   });
-  const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([]);
-  const authorizedUsers = registrationRequests.filter(r => r.status === 'approved');
-  const pendingRequests = registrationRequests.filter(r => r.status === 'pending');
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [activeContactId, setActiveContactId] = useState<string | 'community'>(contacts[0].id);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
@@ -48,26 +59,44 @@ const App: React.FC = () => {
     localStorage.setItem('rei_dynamic_contacts', JSON.stringify(contacts));
   }, [contacts]);
 
-  // Load registration requests from Supabase and keep them live across devices
+  // Track the Supabase auth session
   useEffect(() => {
-    const loadRequests = async () => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Load my own profile whenever the session changes
+  useEffect(() => {
+    if (!session) { setMyProfile(null); return; }
+    const loadMyProfile = async () => {
       const { data, error } = await supabase
-        .from('registration_requests')
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+      if (error) { console.error(error); return; }
+      if (data) setMyProfile(mapProfileRow(data));
+    };
+    loadMyProfile();
+  }, [session]);
+
+  // Load all profiles (for Admin Network Map / New Message) and keep them live across devices
+  useEffect(() => {
+    const loadUsers = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
         .select('*')
         .order('created_at', { ascending: true });
       if (error) { console.error(error); return; }
-      setRegistrationRequests(data.map(row => ({
-        username: row.username,
-        answer: row.answer,
-        avatar: row.avatar,
-        status: row.status,
-        timestamp: new Date(row.created_at),
-      })));
+      setUsers(data.map(mapProfileRow));
     };
-    loadRequests();
+    loadUsers();
     const channel = supabase
-      .channel('registration_requests_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'registration_requests' }, loadRequests)
+      .channel('profiles_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, loadUsers)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -113,7 +142,7 @@ const App: React.FC = () => {
   useEffect(() => {
     messageAudio.current = new Audio(MESSAGE_SOUND_URL);
     messageAudio.current.volume = 0.3;
-    if (authStatus !== 'unauthenticated' && authStatus !== 'pending') {
+    if (authStatus !== 'unauthenticated') {
       setShowNeuralOverlay(true);
     }
   }, [authStatus]);
@@ -152,54 +181,40 @@ const App: React.FC = () => {
     if (isMobileView) setShowSidebar(false);
   };
 
-  const handleRegister = async (username: string, answer: string, avatar?: string) => {
-    // Admin login
-    if (username === terminalKey) {
+  const handleAdminLogin = (key: string) => {
+    if (key === terminalKey) {
       localStorage.setItem('rei_auth_status', 'admin');
-      setAuthStatus('admin');
-      return;
-    }
-    // Regular user — open signup, no approval gate. Account is created and
-    // authenticated immediately, shared across devices via Supabase.
-    const { error } = await supabase
-      .from('registration_requests')
-      .upsert({ username, answer, avatar, status: 'approved' }, { onConflict: 'username' });
-    if (error) console.error(error);
-    localStorage.setItem('rei_auth_status', 'authenticated');
-    localStorage.setItem('rei_pending_user', username);
-    if (avatar) localStorage.setItem('rei_pending_avatar', avatar);
-    setAuthStatus('authenticated');
-  };
-
-  const handleApprove = async (username: string) => {
-    const { error } = await supabase
-      .from('registration_requests')
-      .update({ status: 'approved' })
-      .eq('username', username);
-    if (error) console.error(error);
-    // If this user is currently pending in the browser, upgrade them
-    if (localStorage.getItem('rei_pending_user') === username) {
-      localStorage.setItem('rei_auth_status', 'authenticated');
+      setIsAdminLocal(true);
     }
   };
 
-  const handleReject = async (username: string) => {
-    const { error } = await supabase
-      .from('registration_requests')
-      .delete()
-      .eq('username', username);
-    if (error) console.error(error);
-    if (localStorage.getItem('rei_pending_user') === username) {
-      localStorage.removeItem('rei_auth_status');
-      localStorage.removeItem('rei_pending_user');
-    }
+  const handleSignUp = async ({ firstName, lastName, email, password, avatar }: {
+    firstName: string; lastName: string; email: string; password: string; avatar?: string;
+  }): Promise<string | void> => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) return error.message;
+    const userId = data.user?.id;
+    if (!userId) return 'Check your email to confirm your account, then sign in.';
+
+    const { error: profileError } = await supabase.from('profiles').insert({
+      id: userId,
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      avatar,
+    });
+    if (profileError) return profileError.message;
+
+    if (!data.session) return 'Check your email to confirm your account, then sign in.';
   };
 
-  const handleKick = async (username: string) => {
-    const { error } = await supabase
-      .from('registration_requests')
-      .delete()
-      .eq('username', username);
+  const handleSignIn = async ({ email, password }: { email: string; password: string }): Promise<string | void> => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return error.message;
+  };
+
+  const handleKick = async (id: string) => {
+    const { error } = await supabase.from('profiles').delete().eq('id', id);
     if (error) console.error(error);
   };
 
@@ -208,19 +223,20 @@ const App: React.FC = () => {
     localStorage.setItem('rei_terminal_key', newKey);
   };
 
-  const handleUpdateProfile = (updates: { username?: string; avatar?: string }) => {
-    if (updates.username) {
-      localStorage.setItem('rei_pending_user', updates.username);
-    }
-    if (updates.avatar) {
-      localStorage.setItem('rei_pending_avatar', updates.avatar);
-    }
+  const handleUpdateProfile = async (updates: { username?: string; avatar?: string }) => {
+    if (!session || !updates.avatar) return;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ avatar: updates.avatar })
+      .eq('id', session.user.id);
+    if (error) { console.error(error); return; }
+    setMyProfile(prev => prev ? { ...prev, avatar: updates.avatar } : prev);
   };
 
   const handleAddPost = async (content: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
     const { error } = await supabase.from('posts').insert({
-      author_name: localStorage.getItem('rei_pending_user') || 'Authorized User',
-      author_avatar: localStorage.getItem('rei_pending_avatar') || 'https://picsum.photos/seed/user/200',
+      author_name: myProfile?.username || 'Authorized User',
+      author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
       content,
       media_url: mediaUrl,
       media_type: mediaType,
@@ -242,37 +258,27 @@ const App: React.FC = () => {
   const handleCommentPost = async (postId: string, content: string) => {
     const { error } = await supabase.from('comments').insert({
       post_id: postId,
-      author_name: localStorage.getItem('rei_pending_user') || 'Authorized User',
-      author_avatar: localStorage.getItem('rei_pending_avatar') || 'https://picsum.photos/seed/user/200',
+      author_name: myProfile?.username || 'Authorized User',
+      author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
       content,
     });
     if (error) console.error(error);
   };
 
-  // Check if current pending user got approved
-  useEffect(() => {
-    if (authStatus === 'pending') {
-      const pendingUser = localStorage.getItem('rei_pending_user');
-      if (pendingUser && authorizedUsers.find(u => u.username === pendingUser)) {
-        localStorage.setItem('rei_auth_status', 'authenticated');
-        setAuthStatus('authenticated');
-      }
-    }
-  }, [authorizedUsers, authStatus]);
-
-  if (authStatus === 'unauthenticated' || authStatus === 'pending') {
+  if (authStatus === 'unauthenticated') {
     return (
       <AuthScreen
-        status={authStatus === 'pending' ? 'pending' : 'unauthenticated'}
-        onRegister={handleRegister}
+        onSignUp={handleSignUp}
+        onSignIn={handleSignIn}
+        onAdminLogin={handleAdminLogin}
       />
     );
   }
 
   const activeContact = contacts.find(c => c.id === activeContactId);
   const activeMessages = sessions[activeContactId as string] || [];
-  const currentUsername = localStorage.getItem('rei_pending_user') || 'Authorized User';
-  const currentAvatar = localStorage.getItem('rei_pending_avatar') || 'https://picsum.photos/seed/user/200';
+  const currentUsername = authStatus === 'admin' ? 'Admin' : (myProfile?.username || 'Authorized User');
+  const currentAvatar = myProfile?.avatar || DEFAULT_AVATAR;
 
   return (
     <div className="flex h-[100dvh] w-full bg-[#050000] text-red-50 overflow-hidden relative">
@@ -300,7 +306,7 @@ const App: React.FC = () => {
         <NewChatModal
           isOpen={isNewChatModalOpen}
           onClose={() => setIsNewChatModalOpen(false)}
-          authorizedUsers={authorizedUsers}
+          authorizedUsers={users}
           onSelectUser={(name, avatar) => {
             const newId = `user-${Date.now()}`;
             const newContact: Contact = {
@@ -328,12 +334,13 @@ const App: React.FC = () => {
           activeContactId={activeContactId}
           onSelectContact={handleSelectContact}
           isAdmin={authStatus === 'admin'}
-          pendingCount={pendingRequests.length}
+          pendingCount={0}
           typingContacts={typingContacts}
           onOpenAdmin={() => { setView('admin'); if (isMobileView) setShowSidebar(false); }}
           onOpenSettings={() => setShowSettings(true)}
           onOpenNewChat={() => setIsNewChatModalOpen(true)}
-          onLogout={() => {
+          onLogout={async () => {
+            await supabase.auth.signOut();
             localStorage.removeItem('rei_auth_status');
             window.location.reload();
           }}
@@ -344,10 +351,7 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
         {view === 'admin' ? (
           <AdminDashboard
-            requests={pendingRequests}
-            authorizedUsers={authorizedUsers}
-            onApprove={handleApprove}
-            onReject={handleReject}
+            users={users}
             onKick={handleKick}
             onUpdateKey={handleUpdateKey}
             currentKey={terminalKey}
