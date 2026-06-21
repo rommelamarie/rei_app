@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { INITIAL_CONTACTS } from './constants';
-import { Contact, Message, AuthStatus, RegistrationRequest } from './types';
+import { Contact, Message, AuthStatus, RegistrationRequest, Post } from './types';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import AuthScreen from './components/AuthScreen';
@@ -39,6 +39,16 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('rei_pending_requests');
     return saved ? JSON.parse(saved) : [];
   });
+  const [posts, setPosts] = useState<Post[]>(() => {
+    const saved = localStorage.getItem('rei_community_posts');
+    if (!saved) return [];
+    const parsed: Post[] = JSON.parse(saved);
+    return parsed.map(p => ({
+      ...p,
+      timestamp: new Date(p.timestamp),
+      comments: p.comments?.map(c => ({ ...c, timestamp: new Date(c.timestamp) })),
+    }));
+  });
   const [activeContactId, setActiveContactId] = useState<string | 'community'>(contacts[0].id);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -60,6 +70,11 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('rei_pending_requests', JSON.stringify(pendingRequests));
   }, [pendingRequests]);
+
+  // Persist community posts
+  useEffect(() => {
+    localStorage.setItem('rei_community_posts', JSON.stringify(posts));
+  }, [posts]);
 
   useEffect(() => {
     messageAudio.current = new Audio(MESSAGE_SOUND_URL);
@@ -163,6 +178,44 @@ const App: React.FC = () => {
     if (updates.avatar) {
       localStorage.setItem('rei_pending_avatar', updates.avatar);
     }
+  };
+
+  const handleAddPost = (content: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
+    const newPost: Post = {
+      id: Date.now().toString(),
+      authorName: localStorage.getItem('rei_pending_user') || 'Authorized User',
+      authorAvatar: localStorage.getItem('rei_pending_avatar') || 'https://picsum.photos/seed/user/200',
+      content,
+      mediaUrl,
+      mediaType,
+      timestamp: new Date(),
+      likes: 0,
+      hasLiked: false,
+      comments: [],
+    };
+    setPosts(prev => [newPost, ...prev]);
+  };
+
+  const handleLikePost = (postId: string) => {
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId) return p;
+      const hasLiked = !p.hasLiked;
+      return { ...p, hasLiked, likes: (p.likes || 0) + (hasLiked ? 1 : -1) };
+    }));
+  };
+
+  const handleCommentPost = (postId: string, content: string) => {
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId) return p;
+      const newComment = {
+        id: Date.now().toString(),
+        authorName: localStorage.getItem('rei_pending_user') || 'Authorized User',
+        authorAvatar: localStorage.getItem('rei_pending_avatar') || 'https://picsum.photos/seed/user/200',
+        content,
+        timestamp: new Date(),
+      };
+      return { ...p, comments: [...(p.comments || []), newComment] };
+    }));
   };
 
   // Check if current pending user got approved
@@ -271,10 +324,10 @@ const App: React.FC = () => {
           />
         ) : activeContactId === 'community' ? (
           <CommunityTab
-            posts={[]}
-            onAddPost={() => {}}
-            onLikePost={() => {}}
-            onCommentPost={() => {}}
+            posts={posts}
+            onAddPost={handleAddPost}
+            onLikePost={handleLikePost}
+            onCommentPost={handleCommentPost}
             currentUser={{ name: currentUsername, avatar: currentAvatar }}
             onBack={isMobileView ? () => setShowSidebar(true) : undefined}
           />
