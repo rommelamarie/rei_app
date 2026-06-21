@@ -12,7 +12,7 @@ interface SettingsModalProps {
     avatar: string;
     isAdmin: boolean;
   };
-  onUpdateProfile: (updates: { username?: string; avatar?: string; password?: string }) => void;
+  onUpdateProfile: (updates: { username?: string; avatar?: string; password?: string }) => void | Promise<void>;
   terminalKey: string;
 }
 
@@ -41,14 +41,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveStatus('saving');
+    await onUpdateProfile({ username, avatar, password });
+    setSaveStatus('success');
     setTimeout(() => {
-      onUpdateProfile({ username, avatar, password });
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    }, 800);
+      setSaveStatus('idle');
+      onClose();
+    }, 1000);
   };
 
   return (
@@ -81,7 +82,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             </div>
           </div>
-          <button type="submit" className="w-full py-4 bg-red-600 text-white font-black uppercase tracking-widest rounded-2xl">Commit Changes</button>
+          <button
+            type="submit"
+            disabled={saveStatus !== 'idle'}
+            className="w-full py-4 bg-red-600 text-white font-black uppercase tracking-widest rounded-2xl disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {saveStatus === 'saving' && <Save size={18} className="animate-spin" />}
+            {saveStatus === 'success' && <Check size={18} />}
+            {saveStatus === 'saving' ? 'Syncing...' : saveStatus === 'success' ? 'Synced' : 'Commit Changes'}
+          </button>
         </form>
       </div>
     </div>
