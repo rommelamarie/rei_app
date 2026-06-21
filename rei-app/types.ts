@@ -55,6 +55,7 @@ export interface RegistrationRequest {
   answer: string;
   avatar?: string;
   timestamp: Date;
+  status: 'pending' | 'approved';
 }
 
 export interface ActivityLog {

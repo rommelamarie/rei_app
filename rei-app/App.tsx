@@ -10,6 +10,7 @@ import NeuralBreachOverlay from './components/NeuralBreachOverlay';
 import SettingsModal from './components/SettingsModal';
 import NewChatModal from './components/NewChatModal';
 import { generateAIResponse } from './services/geminiService';
+import { supabase } from './services/supabaseClient';
 
 const MESSAGE_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2550/2550-preview.mp3';
 
@@ -31,24 +32,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('rei_dynamic_contacts');
     return saved ? JSON.parse(saved) : INITIAL_CONTACTS;
   });
-  const [authorizedUsers, setAuthorizedUsers] = useState<RegistrationRequest[]>(() => {
-    const saved = localStorage.getItem('rei_authorized_users');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [pendingRequests, setPendingRequests] = useState<RegistrationRequest[]>(() => {
-    const saved = localStorage.getItem('rei_pending_requests');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [posts, setPosts] = useState<Post[]>(() => {
-    const saved = localStorage.getItem('rei_community_posts');
-    if (!saved) return [];
-    const parsed: Post[] = JSON.parse(saved);
-    return parsed.map(p => ({
-      ...p,
-      timestamp: new Date(p.timestamp),
-      comments: p.comments?.map(c => ({ ...c, timestamp: new Date(c.timestamp) })),
-    }));
-  });
+  const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([]);
+  const authorizedUsers = registrationRequests.filter(r => r.status === 'approved');
+  const pendingRequests = registrationRequests.filter(r => r.status === 'pending');
+  const [posts, setPosts] = useState<Post[]>([]);
   const [activeContactId, setActiveContactId] = useState<string | 'community'>(contacts[0].id);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -61,20 +48,67 @@ const App: React.FC = () => {
     localStorage.setItem('rei_dynamic_contacts', JSON.stringify(contacts));
   }, [contacts]);
 
-  // Persist authorized users
+  // Load registration requests from Supabase and keep them live across devices
   useEffect(() => {
-    localStorage.setItem('rei_authorized_users', JSON.stringify(authorizedUsers));
-  }, [authorizedUsers]);
+    const loadRequests = async () => {
+      const { data, error } = await supabase
+        .from('registration_requests')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) { console.error(error); return; }
+      setRegistrationRequests(data.map(row => ({
+        username: row.username,
+        answer: row.answer,
+        avatar: row.avatar,
+        status: row.status,
+        timestamp: new Date(row.created_at),
+      })));
+    };
+    loadRequests();
+    const channel = supabase
+      .channel('registration_requests_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'registration_requests' }, loadRequests)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
-  // Persist pending requests
+  // Load community posts (with comments) from Supabase and keep them live across devices
   useEffect(() => {
-    localStorage.setItem('rei_pending_requests', JSON.stringify(pendingRequests));
-  }, [pendingRequests]);
-
-  // Persist community posts
-  useEffect(() => {
-    localStorage.setItem('rei_community_posts', JSON.stringify(posts));
-  }, [posts]);
+    const loadPosts = async () => {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*, comments(*)')
+        .order('created_at', { ascending: false });
+      if (error) { console.error(error); return; }
+      setPosts(data.map((row: any) => ({
+        id: row.id,
+        authorName: row.author_name,
+        authorAvatar: row.author_avatar,
+        content: row.content,
+        mediaUrl: row.media_url,
+        mediaType: row.media_type,
+        timestamp: new Date(row.created_at),
+        likes: row.likes,
+        hasLiked: row.has_liked,
+        comments: (row.comments || [])
+          .map((c: any) => ({
+            id: c.id,
+            authorName: c.author_name,
+            authorAvatar: c.author_avatar,
+            content: c.content,
+            timestamp: new Date(c.created_at),
+          }))
+          .sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime()),
+      })));
+    };
+    loadPosts();
+    const channel = supabase
+      .channel('posts_and_comments_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, loadPosts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, loadPosts)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   useEffect(() => {
     messageAudio.current = new Audio(MESSAGE_SOUND_URL);
@@ -118,52 +152,54 @@ const App: React.FC = () => {
     if (isMobileView) setShowSidebar(false);
   };
 
-  const handleRegister = (username: string, answer: string, avatar?: string) => {
+  const handleRegister = async (username: string, answer: string, avatar?: string) => {
     // Admin login
     if (username === terminalKey) {
       localStorage.setItem('rei_auth_status', 'admin');
       setAuthStatus('admin');
       return;
     }
-    // Regular user — add to pending requests & show pending screen
-    const newRequest: RegistrationRequest = {
-      username,
-      answer,
-      avatar,
-      timestamp: new Date(),
-    };
-    setPendingRequests(prev => {
-      const updated = [...prev.filter(r => r.username !== username), newRequest];
-      localStorage.setItem('rei_pending_requests', JSON.stringify(updated));
-      return updated;
-    });
+    // Regular user — add to pending requests (shared across devices) & show pending screen
+    const { error } = await supabase
+      .from('registration_requests')
+      .upsert({ username, answer, avatar, status: 'pending' }, { onConflict: 'username' });
+    if (error) console.error(error);
     localStorage.setItem('rei_auth_status', 'pending');
     localStorage.setItem('rei_pending_user', username);
     if (avatar) localStorage.setItem('rei_pending_avatar', avatar);
     setAuthStatus('pending');
   };
 
-  const handleApprove = (username: string) => {
-    const req = pendingRequests.find(r => r.username === username);
-    if (!req) return;
-    setAuthorizedUsers(prev => [...prev.filter(u => u.username !== username), req]);
-    setPendingRequests(prev => prev.filter(r => r.username !== username));
+  const handleApprove = async (username: string) => {
+    const { error } = await supabase
+      .from('registration_requests')
+      .update({ status: 'approved' })
+      .eq('username', username);
+    if (error) console.error(error);
     // If this user is currently pending in the browser, upgrade them
     if (localStorage.getItem('rei_pending_user') === username) {
       localStorage.setItem('rei_auth_status', 'authenticated');
     }
   };
 
-  const handleReject = (username: string) => {
-    setPendingRequests(prev => prev.filter(r => r.username !== username));
+  const handleReject = async (username: string) => {
+    const { error } = await supabase
+      .from('registration_requests')
+      .delete()
+      .eq('username', username);
+    if (error) console.error(error);
     if (localStorage.getItem('rei_pending_user') === username) {
       localStorage.removeItem('rei_auth_status');
       localStorage.removeItem('rei_pending_user');
     }
   };
 
-  const handleKick = (username: string) => {
-    setAuthorizedUsers(prev => prev.filter(u => u.username !== username));
+  const handleKick = async (username: string) => {
+    const { error } = await supabase
+      .from('registration_requests')
+      .delete()
+      .eq('username', username);
+    if (error) console.error(error);
   };
 
   const handleUpdateKey = (newKey: string) => {
@@ -180,42 +216,36 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddPost = (content: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
-    const newPost: Post = {
-      id: Date.now().toString(),
-      authorName: localStorage.getItem('rei_pending_user') || 'Authorized User',
-      authorAvatar: localStorage.getItem('rei_pending_avatar') || 'https://picsum.photos/seed/user/200',
+  const handleAddPost = async (content: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
+    const { error } = await supabase.from('posts').insert({
+      author_name: localStorage.getItem('rei_pending_user') || 'Authorized User',
+      author_avatar: localStorage.getItem('rei_pending_avatar') || 'https://picsum.photos/seed/user/200',
       content,
-      mediaUrl,
-      mediaType,
-      timestamp: new Date(),
-      likes: 0,
-      hasLiked: false,
-      comments: [],
-    };
-    setPosts(prev => [newPost, ...prev]);
+      media_url: mediaUrl,
+      media_type: mediaType,
+    });
+    if (error) console.error(error);
   };
 
-  const handleLikePost = (postId: string) => {
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const hasLiked = !p.hasLiked;
-      return { ...p, hasLiked, likes: (p.likes || 0) + (hasLiked ? 1 : -1) };
-    }));
+  const handleLikePost = async (postId: string) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    const hasLiked = !post.hasLiked;
+    const { error } = await supabase
+      .from('posts')
+      .update({ has_liked: hasLiked, likes: (post.likes || 0) + (hasLiked ? 1 : -1) })
+      .eq('id', postId);
+    if (error) console.error(error);
   };
 
-  const handleCommentPost = (postId: string, content: string) => {
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const newComment = {
-        id: Date.now().toString(),
-        authorName: localStorage.getItem('rei_pending_user') || 'Authorized User',
-        authorAvatar: localStorage.getItem('rei_pending_avatar') || 'https://picsum.photos/seed/user/200',
-        content,
-        timestamp: new Date(),
-      };
-      return { ...p, comments: [...(p.comments || []), newComment] };
-    }));
+  const handleCommentPost = async (postId: string, content: string) => {
+    const { error } = await supabase.from('comments').insert({
+      post_id: postId,
+      author_name: localStorage.getItem('rei_pending_user') || 'Authorized User',
+      author_avatar: localStorage.getItem('rei_pending_avatar') || 'https://picsum.photos/seed/user/200',
+      content,
+    });
+    if (error) console.error(error);
   };
 
   // Check if current pending user got approved
