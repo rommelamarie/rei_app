@@ -142,7 +142,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-1">
           <FilterButton active={activeContactId === 'community'} onClick={() => onSelectContact('community')} icon={<Globe size={14}/>} label="Hub" />
-          <FilterButton active={filter === 'all' && activeContactId !== 'community'} onClick={() => setFilter('all')} icon={<MessageSquare size={14}/>} label="All" />
+          <FilterButton active={filter === 'all' && activeContactId !== 'community'} onClick={() => setFilter('all')} icon={<MessageSquare size={14}/>} label="Broadcast" />
           <FilterButton active={filter === 'bot'} onClick={() => setFilter('bot')} icon={<Bot size={14}/>} label="Cores" />
         </div>
       </div>
