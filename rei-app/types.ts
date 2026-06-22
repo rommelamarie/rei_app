@@ -36,6 +36,7 @@ export interface Message {
 
 export interface Contact {
   id: string;
+  profileId?: string;
   name: string;
   avatar: string;
   lastMessage?: string;
@@ -65,6 +66,7 @@ export interface UserProfile {
   work?: string;
   hobby?: string;
   interests?: string;
+  isPublic: boolean;
   joinedAt: Date;
 }
 

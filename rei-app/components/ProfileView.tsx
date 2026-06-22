@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { UserProfile, Post } from '../types';
-import { ChevronLeft, Camera, Pencil, Save, Check, X, Loader2 } from 'lucide-react';
+import { ChevronLeft, Camera, Pencil, Save, Check, X, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
 import { format } from 'date-fns';
 import SpiderLily from './SpiderLily';
 
@@ -11,7 +11,8 @@ interface ProfileViewProps {
   onBack?: () => void;
   onSave?: (updates: {
     firstName: string; lastName: string; nickname: string; bio: string;
-    school: string; work: string; hobby: string; interests: string; avatar?: string;
+    school: string; work: string; hobby: string; interests: string;
+    isPublic: boolean; avatar?: string;
   }) => Promise<void>;
 }
 
@@ -46,6 +47,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
   const [work, setWork] = useState(profile.work || '');
   const [hobby, setHobby] = useState(profile.hobby || '');
   const [interests, setInterests] = useState(profile.interests || '');
+  const [isPublic, setIsPublic] = useState(profile.isPublic);
   const [avatar, setAvatar] = useState(profile.avatar);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -66,6 +68,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
     setWork(profile.work || '');
     setHobby(profile.hobby || '');
     setInterests(profile.interests || '');
+    setIsPublic(profile.isPublic);
     setAvatar(profile.avatar);
     setSaveStatus('idle');
     setIsEditing(true);
@@ -77,7 +80,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
     setSaveStatus('saving');
     setErrorMessage(null);
     try {
-      await onSave({ firstName, lastName, nickname, bio, school, work, hobby, interests, avatar });
+      await onSave({ firstName, lastName, nickname, bio, school, work, hobby, interests, isPublic, avatar });
       setSaveStatus('success');
       setTimeout(() => {
         setSaveStatus('idle');
@@ -183,6 +186,19 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
                 placeholder="Interests"
                 className="w-full bg-[#050000] border border-red-950 rounded-xl py-3 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-sm"
               />
+              <button
+                type="button"
+                onClick={() => setIsPublic(!isPublic)}
+                className="w-full flex items-center justify-between bg-[#050000] border border-red-950 rounded-xl py-3 px-4"
+              >
+                <span className="flex items-center gap-2 text-red-50 text-sm font-bold">
+                  {isPublic ? <Eye size={16} className="text-red-500" /> : <EyeOff size={16} className="text-red-800" />}
+                  Allow others to view my profile
+                </span>
+                <span className={`w-11 h-6 rounded-full relative transition-colors ${isPublic ? 'bg-red-600' : 'bg-red-950'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${isPublic ? 'translate-x-5' : ''}`} />
+                </span>
+              </button>
               {saveStatus === 'error' && (
                 <p className="text-red-500 text-xs font-bold text-center">{errorMessage}</p>
               )}
@@ -215,38 +231,49 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
               <p className="text-[10px] text-red-900 font-black uppercase tracking-widest mt-1">
                 Member since {format(profile.joinedAt, 'MMMM yyyy')}
               </p>
-              {profile.bio && <p className="text-red-200 text-sm mt-4 max-w-md">{profile.bio}</p>}
 
-              {(profile.school || profile.work || profile.hobby || profile.interests) && (
-                <div className="grid grid-cols-2 gap-3 mt-5 w-full max-w-md text-left">
-                  {profile.school && <ProfileFact label="School" value={profile.school} />}
-                  {profile.work && <ProfileFact label="Work" value={profile.work} />}
-                  {profile.hobby && <ProfileFact label="Hobby" value={profile.hobby} />}
-                  {profile.interests && <ProfileFact label="Interests" value={profile.interests} />}
+              {!isOwnProfile && !profile.isPublic ? (
+                <div className="flex flex-col items-center mt-6 py-8 px-4 bg-[#0a0101] border border-dashed border-red-950 rounded-[2rem] w-full max-w-md">
+                  <Lock size={24} className="text-red-800 mb-2" />
+                  <p className="text-red-700 text-xs font-black uppercase tracking-widest">This profile is private</p>
                 </div>
+              ) : (
+                <>
+                  {profile.bio && <p className="text-red-200 text-sm mt-4 max-w-md">{profile.bio}</p>}
+                  {(profile.school || profile.work || profile.hobby || profile.interests) && (
+                    <div className="grid grid-cols-2 gap-3 mt-5 w-full max-w-md text-left">
+                      {profile.school && <ProfileFact label="School" value={profile.school} />}
+                      {profile.work && <ProfileFact label="Work" value={profile.work} />}
+                      {profile.hobby && <ProfileFact label="Hobby" value={profile.hobby} />}
+                      {profile.interests && <ProfileFact label="Interests" value={profile.interests} />}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
         </div>
 
-        <div className="max-w-2xl mx-auto space-y-6">
-          <h4 className="text-red-700 text-[10px] font-black uppercase tracking-widest px-2">
-            {isOwnProfile ? 'Your Broadcasts' : `${displayName(profile)}'s Broadcasts`}
-          </h4>
-          {posts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 bg-[#130303]/40 border border-dashed border-red-950 rounded-[3rem]">
-              <p className="text-red-900 text-[10px] font-black uppercase tracking-widest">No broadcasts yet.</p>
-            </div>
-          ) : (
-            posts.map((post) => (
-              <div key={post.id} className="bg-[#130303]/40 border border-red-950/50 rounded-[2.5rem] overflow-hidden p-5 shadow-xl">
-                <p className="text-[9px] text-red-900 font-black uppercase tracking-widest mb-2">{format(post.timestamp, 'MMM d, HH:mm')}</p>
-                <p className="text-red-100 text-sm mb-4">{post.content}</p>
-                {post.mediaUrl && <img src={post.mediaUrl} className="rounded-2xl w-full" alt="Media" />}
+        {(isOwnProfile || profile.isPublic) && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            <h4 className="text-red-700 text-[10px] font-black uppercase tracking-widest px-2">
+              {isOwnProfile ? 'Your Broadcasts' : `${displayName(profile)}'s Broadcasts`}
+            </h4>
+            {posts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 bg-[#130303]/40 border border-dashed border-red-950 rounded-[3rem]">
+                <p className="text-red-900 text-[10px] font-black uppercase tracking-widest">No broadcasts yet.</p>
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+              posts.map((post) => (
+                <div key={post.id} className="bg-[#130303]/40 border border-red-950/50 rounded-[2.5rem] overflow-hidden p-5 shadow-xl">
+                  <p className="text-[9px] text-red-900 font-black uppercase tracking-widest mb-2">{format(post.timestamp, 'MMM d, HH:mm')}</p>
+                  <p className="text-red-100 text-sm mb-4">{post.content}</p>
+                  {post.mediaUrl && <img src={post.mediaUrl} className="rounded-2xl w-full" alt="Media" />}
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

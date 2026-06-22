@@ -30,6 +30,7 @@ const mapProfileRow = (row: any): UserProfile => ({
   work: row.work,
   hobby: row.hobby,
   interests: row.interests,
+  isPublic: row.is_public ?? true,
   joinedAt: new Date(row.created_at),
 });
 
@@ -289,7 +290,8 @@ const App: React.FC = () => {
 
   const handleSaveProfile = async (updates: {
     firstName: string; lastName: string; nickname: string; bio: string;
-    school: string; work: string; hobby: string; interests: string; avatar?: string;
+    school: string; work: string; hobby: string; interests: string;
+    isPublic: boolean; avatar?: string;
   }) => {
     if (!session) return;
     const { error } = await supabase
@@ -303,6 +305,7 @@ const App: React.FC = () => {
         work: updates.work,
         hobby: updates.hobby,
         interests: updates.interests,
+        is_public: updates.isPublic,
         avatar: updates.avatar,
       })
       .eq('id', session.user.id);
@@ -318,6 +321,7 @@ const App: React.FC = () => {
       work: updates.work,
       hobby: updates.hobby,
       interests: updates.interests,
+      isPublic: updates.isPublic,
       avatar: updates.avatar,
     } : prev);
   };
@@ -364,10 +368,10 @@ const App: React.FC = () => {
           isOpen={isNewChatModalOpen}
           onClose={() => setIsNewChatModalOpen(false)}
           authorizedUsers={users}
-          onSelectUser={(name, avatar) => {
+          onSelectUser={(id, name, avatar) => {
             const newId = `user-${Date.now()}`;
             const newContact: Contact = {
-              id: newId, name, avatar,
+              id: newId, profileId: id, name, avatar,
               isOnline: true, type: 'human',
               category: 'direct', lastSeen: 'Online'
             };
@@ -397,6 +401,7 @@ const App: React.FC = () => {
           onOpenSettings={() => setShowSettings(true)}
           onOpenNewChat={() => setIsNewChatModalOpen(true)}
           onOpenProfile={() => myProfile && handleViewProfile(myProfile.id)}
+          onViewProfile={handleViewProfile}
           onLogout={async () => {
             await supabase.auth.signOut();
             localStorage.removeItem('rei_auth_status');
@@ -466,6 +471,7 @@ const App: React.FC = () => {
               onMarkRead={() => {}}
               onBack={isMobileView ? () => setShowSidebar(true) : undefined}
               isTyping={typingContacts.has(activeContactId as string)}
+              onViewProfile={handleViewProfile}
             />
           )
         )}

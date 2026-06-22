@@ -14,6 +14,7 @@ interface SidebarProps {
   onOpenSettings?: () => void;
   onOpenNewChat?: () => void;
   onOpenProfile?: () => void;
+  onViewProfile?: (id: string) => void;
   onLogout?: () => void;
 }
 
@@ -28,6 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onOpenNewChat,
   onOpenProfile,
+  onViewProfile,
   onLogout
 }) => {
   const [search, setSearch] = useState('');
@@ -152,21 +154,29 @@ const Sidebar: React.FC<SidebarProps> = ({
           const isTyping = typingContacts.has(contact.id);
           const isActive = activeContactId === contact.id;
           return (
-            <button
+            <div
               key={contact.id}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectContact(contact.id)}
-              className={`w-full flex items-center p-4 transition-all hover:bg-red-950/10 group relative ${isActive ? 'bg-red-950/20' : ''}`}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectContact(contact.id); }}
+              className={`w-full flex items-center p-4 transition-all hover:bg-red-950/10 group relative cursor-pointer ${isActive ? 'bg-red-950/20' : ''}`}
             >
               {isActive && (
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.5)]" />
               )}
-              
-              <div className="relative flex-shrink-0">
+
+              <button
+                type="button"
+                disabled={!contact.profileId || !onViewProfile}
+                onClick={(e) => { e.stopPropagation(); if (contact.profileId) onViewProfile?.(contact.profileId); }}
+                className="relative flex-shrink-0 disabled:cursor-default"
+              >
                 <img src={contact.avatar} alt={contact.name} className={`w-12 h-12 rounded-full object-cover border border-red-900/30 grayscale-[0.3] group-hover:grayscale-0 transition-all ${isTyping ? 'animate-pulse' : ''}`} />
                 {contact.isOnline && (
                   <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-[#0a0101] rounded-full" />
                 )}
-              </div>
+              </button>
 
               <div className="ml-4 flex-1 min-w-0 text-left">
                 <div className="flex items-center justify-between mb-0.5">
@@ -183,7 +193,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   </p>
                 )}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>

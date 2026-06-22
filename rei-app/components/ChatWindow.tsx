@@ -12,9 +12,10 @@ interface ChatWindowProps {
   onMarkRead: () => void;
   onBack?: () => void;
   isTyping?: boolean;
+  onViewProfile?: (id: string) => void;
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ contact, messages, onSendMessage, onMarkRead, onBack, isTyping }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ contact, messages, onSendMessage, onMarkRead, onBack, isTyping, onViewProfile }) => {
   const [inputText, setInputText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isCalling, setIsCalling] = useState(false);
@@ -122,11 +123,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ contact, messages, onSendMessag
               <ChevronLeft size={24} />
             </button>
           )}
-          <img src={contact.avatar} alt="" className="w-10 h-10 rounded-full object-cover border border-red-900/40 mr-3" />
-          <div className="truncate">
-            <h2 className="font-bold text-red-50 text-base leading-tight uppercase tracking-tight truncate">{contact.name}</h2>
-            <p className="text-[9px] text-red-800 font-black uppercase tracking-widest">{contact.type === 'ai' ? 'Core Node' : contact.lastSeen}</p>
-          </div>
+          <button
+            type="button"
+            disabled={!contact.profileId || !onViewProfile}
+            onClick={() => contact.profileId && onViewProfile?.(contact.profileId)}
+            className="flex items-center min-w-0 text-left disabled:cursor-default"
+          >
+            <img src={contact.avatar} alt="" className="w-10 h-10 rounded-full object-cover border border-red-900/40 mr-3" />
+            <div className="truncate">
+              <h2 className="font-bold text-red-50 text-base leading-tight uppercase tracking-tight truncate">{contact.name}</h2>
+              <p className="text-[9px] text-red-800 font-black uppercase tracking-widest">{contact.type === 'ai' ? 'Core Node' : contact.lastSeen}</p>
+            </div>
+          </button>
         </div>
         <div className="flex items-center space-x-1">
           <button onClick={startCall} className="p-2 text-red-500 hover:bg-red-900/20 rounded-full"><Phone size={20} /></button>

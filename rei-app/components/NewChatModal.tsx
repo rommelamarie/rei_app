@@ -7,7 +7,7 @@ interface NewChatModalProps {
   isOpen: boolean;
   onClose: () => void;
   authorizedUsers: UserProfile[];
-  onSelectUser: (username: string, avatar: string) => void;
+  onSelectUser: (id: string, username: string, avatar: string) => void;
 }
 
 const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose, authorizedUsers, onSelectUser }) => {
@@ -32,7 +32,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose, authorized
         <div className="px-8 py-4"><input autoFocus type="text" value={search} onChange={(e) => setSearch(e.target.value)} className="w-full bg-[#0a0101] border border-red-950 rounded-2xl py-3 px-4 text-red-50" placeholder="Identity Tag..." /></div>
         <div className="flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar">
           {filteredUsers.map((user) => (
-            <button key={user.username} onClick={() => onSelectUser(user.username, user.avatar || '')} className="w-full flex items-center p-3 rounded-2xl hover:bg-red-950/20 text-left">
+            <button key={user.id} onClick={() => onSelectUser(user.id, user.username, user.avatar || '')} className="w-full flex items-center p-3 rounded-2xl hover:bg-red-950/20 text-left">
               <img src={user.avatar || `https://picsum.photos/seed/${user.username}/200`} className="w-12 h-12 rounded-full mr-4" alt={user.username} />
               <div className="flex-1 font-bold text-red-50">{user.username}</div>
               <Plus size={16} className="text-red-600" />
