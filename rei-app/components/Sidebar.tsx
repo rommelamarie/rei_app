@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Contact } from '../types';
-import { Search, MoreVertical, Edit, MessageSquare, Bot, Settings, LogOut, ShieldAlert, Download, Globe, Loader2 } from 'lucide-react';
+import { Search, MoreVertical, Edit, MessageSquare, Bot, Settings, LogOut, ShieldAlert, Download, Globe, Loader2, User } from 'lucide-react';
 import SpiderLily from './SpiderLily';
 
 interface SidebarProps {
@@ -13,6 +13,7 @@ interface SidebarProps {
   onOpenAdmin?: () => void;
   onOpenSettings?: () => void;
   onOpenNewChat?: () => void;
+  onOpenProfile?: () => void;
   onLogout?: () => void;
 }
 
@@ -26,7 +27,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onOpenAdmin,
   onOpenSettings,
   onOpenNewChat,
-  onLogout 
+  onOpenProfile,
+  onLogout
 }) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'direct' | 'group' | 'bot'>('all');
@@ -106,7 +108,13 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <button onClick={handleInstallClick} className="w-full flex items-center px-5 py-4 text-sm text-red-100 hover:bg-red-900/30 transition-colors">
                     <Download size={16} className="mr-3 text-red-500" /> Standalone Client
                   </button>
-                  <button 
+                  <button
+                    onClick={() => { setShowMenu(false); onOpenProfile?.(); }}
+                    className="w-full flex items-center px-5 py-4 text-sm text-red-100 hover:bg-red-900/30 transition-colors"
+                  >
+                    <User size={16} className="mr-3 text-red-500" /> My Profile
+                  </button>
+                  <button
                     onClick={() => { setShowMenu(false); onOpenSettings?.(); }}
                     className="w-full flex items-center px-5 py-4 text-sm text-red-100 hover:bg-red-900/30 transition-colors"
                   >

@@ -1,5 +1,6 @@
 export interface Post {
   id: string;
+  authorId?: string;
   authorName: string;
   authorAvatar?: string;
   content: string;
@@ -13,6 +14,7 @@ export interface Post {
 
 export interface Comment {
   id: string;
+  authorId?: string;
   authorName: string;
   authorAvatar?: string;
   content: string;
@@ -57,6 +59,8 @@ export interface UserProfile {
   lastName: string;
   email: string;
   avatar?: string;
+  bio?: string;
+  joinedAt: Date;
 }
 
 export interface ActivityLog {

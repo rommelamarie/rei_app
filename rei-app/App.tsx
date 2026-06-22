@@ -10,6 +10,7 @@ import CommunityTab from './components/CommunityTab';
 import NeuralBreachOverlay from './components/NeuralBreachOverlay';
 import SettingsModal from './components/SettingsModal';
 import NewChatModal from './components/NewChatModal';
+import ProfileView from './components/ProfileView';
 import { generateAIResponse } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 
@@ -23,6 +24,8 @@ const mapProfileRow = (row: any): UserProfile => ({
   lastName: row.last_name,
   email: row.email,
   avatar: row.avatar,
+  bio: row.bio,
+  joinedAt: new Date(row.created_at),
 });
 
 const App: React.FC = () => {
@@ -40,7 +43,8 @@ const App: React.FC = () => {
   const [terminalKey, setTerminalKey] = useState(
     () => localStorage.getItem('rei_terminal_key') || 'REI_ADMIN'
   );
-  const [view, setView] = useState<'chat' | 'admin'>('chat');
+  const [view, setView] = useState<'chat' | 'admin' | 'profile'>('chat');
+  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Contact[]>(() => {
     const saved = localStorage.getItem('rei_dynamic_contacts');
     return saved ? JSON.parse(saved) : INITIAL_CONTACTS;
@@ -111,6 +115,7 @@ const App: React.FC = () => {
       if (error) { console.error(error); return; }
       setPosts(data.map((row: any) => ({
         id: row.id,
+        authorId: row.author_id,
         authorName: row.author_name,
         authorAvatar: row.author_avatar,
         content: row.content,
@@ -122,6 +127,7 @@ const App: React.FC = () => {
         comments: (row.comments || [])
           .map((c: any) => ({
             id: c.id,
+            authorId: c.author_id,
             authorName: c.author_name,
             authorAvatar: c.author_avatar,
             content: c.content,
@@ -235,6 +241,7 @@ const App: React.FC = () => {
 
   const handleAddPost = async (content: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
     const { error } = await supabase.from('posts').insert({
+      author_id: myProfile?.id,
       author_name: myProfile?.username || 'Authorized User',
       author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
       content,
@@ -258,11 +265,35 @@ const App: React.FC = () => {
   const handleCommentPost = async (postId: string, content: string) => {
     const { error } = await supabase.from('comments').insert({
       post_id: postId,
+      author_id: myProfile?.id,
       author_name: myProfile?.username || 'Authorized User',
       author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
       content,
     });
     if (error) console.error(error);
+  };
+
+  const handleViewProfile = (id: string) => {
+    setViewingProfileId(id);
+    setView('profile');
+    if (isMobileView) setShowSidebar(false);
+  };
+
+  const handleSaveProfile = async (updates: { firstName: string; lastName: string; bio: string; avatar?: string }) => {
+    if (!session) return;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ first_name: updates.firstName, last_name: updates.lastName, bio: updates.bio, avatar: updates.avatar })
+      .eq('id', session.user.id);
+    if (error) throw error;
+    setMyProfile(prev => prev ? {
+      ...prev,
+      firstName: updates.firstName,
+      lastName: updates.lastName,
+      username: `${updates.firstName} ${updates.lastName}`.trim(),
+      bio: updates.bio,
+      avatar: updates.avatar,
+    } : prev);
   };
 
   if (authStatus === 'unauthenticated') {
@@ -339,6 +370,7 @@ const App: React.FC = () => {
           onOpenAdmin={() => { setView('admin'); if (isMobileView) setShowSidebar(false); }}
           onOpenSettings={() => setShowSettings(true)}
           onOpenNewChat={() => setIsNewChatModalOpen(true)}
+          onOpenProfile={() => myProfile && handleViewProfile(myProfile.id)}
           onLogout={async () => {
             await supabase.auth.signOut();
             localStorage.removeItem('rei_auth_status');
@@ -353,10 +385,26 @@ const App: React.FC = () => {
           <AdminDashboard
             users={users}
             onKick={handleKick}
+            onViewProfile={handleViewProfile}
             onUpdateKey={handleUpdateKey}
             currentKey={terminalKey}
             onBack={isMobileView ? () => setShowSidebar(true) : undefined}
           />
+        ) : view === 'profile' ? (
+          (() => {
+            const profile = users.find(u => u.id === viewingProfileId) || (myProfile?.id === viewingProfileId ? myProfile : null);
+            if (!profile) return null;
+            const isOwnProfile = session?.user.id === viewingProfileId;
+            return (
+              <ProfileView
+                profile={profile}
+                posts={posts.filter(p => p.authorId === viewingProfileId)}
+                isOwnProfile={isOwnProfile}
+                onSave={isOwnProfile ? handleSaveProfile : undefined}
+                onBack={() => setView('chat')}
+              />
+            );
+          })()
         ) : activeContactId === 'community' ? (
           <CommunityTab
             posts={posts}
@@ -365,6 +413,7 @@ const App: React.FC = () => {
             onCommentPost={handleCommentPost}
             currentUser={{ name: currentUsername, avatar: currentAvatar }}
             onBack={isMobileView ? () => setShowSidebar(true) : undefined}
+            onViewProfile={handleViewProfile}
           />
         ) : (
           activeContact && (

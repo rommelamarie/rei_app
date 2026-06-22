@@ -14,6 +14,7 @@ interface CommunityTabProps {
   onGenerateText?: (prompt: string) => Promise<string>;
   onGenerateImage?: (prompt: string) => Promise<string | undefined>;
   onMessageUser?: (userName: string, avatar: string) => void;
+  onViewProfile?: (userId: string) => void;
 }
 
 const CommunityTab: React.FC<CommunityTabProps> = ({ 
@@ -25,7 +26,8 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
   onBack,
   onGenerateText,
   onGenerateImage,
-  onMessageUser
+  onMessageUser,
+  onViewProfile
 }) => {
   const [content, setContent] = useState('');
   const [mediaPreview, setMediaPreview] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
@@ -101,13 +103,18 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
         <div className="max-w-2xl mx-auto space-y-6">
           {posts.map((post) => (
             <div key={post.id} className="bg-[#130303]/40 border border-red-950/50 rounded-[2.5rem] overflow-hidden p-5 shadow-xl">
-              <div className="flex items-center space-x-3 mb-4">
+              <button
+                type="button"
+                disabled={!post.authorId || !onViewProfile}
+                onClick={() => post.authorId && onViewProfile?.(post.authorId)}
+                className="flex items-center space-x-3 mb-4 text-left disabled:cursor-default"
+              >
                 <img src={post.authorAvatar} className="w-10 h-10 rounded-full" alt={post.authorName} />
                 <div>
                   <h4 className="font-bold text-red-50 text-sm">{post.authorName}</h4>
                   <p className="text-[9px] text-red-900 font-black uppercase tracking-widest">{format(post.timestamp, 'HH:mm')}</p>
                 </div>
-              </div>
+              </button>
               <p className="text-red-100 text-sm mb-4">{post.content}</p>
               {post.mediaUrl && <img src={post.mediaUrl} className="rounded-2xl w-full mb-4" alt="Media" />}
             </div>

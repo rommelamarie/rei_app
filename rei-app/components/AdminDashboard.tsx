@@ -10,6 +10,7 @@ import SpiderLily from './SpiderLily';
 interface AdminDashboardProps {
   users: UserProfile[];
   onKick: (id: string) => void;
+  onViewProfile?: (id: string) => void;
   onUpdateKey?: (newKey: string) => void;
   currentKey?: string;
   onBack?: () => void;
@@ -26,6 +27,7 @@ const MOCK_LOGS: ActivityLog[] = [
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
   users,
   onKick,
+  onViewProfile,
   onBack
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'logs'>('active');
@@ -92,13 +94,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
                 {users.map((user) => (
                   <div key={user.id} className="group bg-[#130303]/80 border border-red-950 p-6 rounded-[2.5rem] flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
+                    <button
+                      type="button"
+                      onClick={() => onViewProfile?.(user.id)}
+                      disabled={!onViewProfile}
+                      className="flex items-center space-x-4 text-left disabled:cursor-default"
+                    >
                       <img src={user.avatar || `https://picsum.photos/seed/${user.username}/200`} className="w-14 h-14 rounded-full object-cover border border-red-900/30" alt={user.username} />
                       <div>
                         <h4 className="text-red-50 font-black text-lg uppercase tracking-tight">{user.username}</h4>
                         <p className="text-red-700 text-xs font-medium">{user.email}</p>
                       </div>
-                    </div>
+                    </button>
                     <button onClick={() => onKick(user.id)} className="p-3 bg-red-950/40 text-red-600 rounded-2xl border border-red-900/30">
                       <UserMinus size={20} />
                     </button>
