@@ -70,6 +70,17 @@ export interface UserProfile {
   joinedAt: Date;
 }
 
+export interface Testimonial {
+  id: string;
+  profileId: string;
+  authorId?: string;
+  authorName: string;
+  authorAvatar?: string;
+  content: string;
+  status: 'pending' | 'approved' | 'denied' | 'archived';
+  timestamp: Date;
+}
+
 export interface ActivityLog {
   id: string;
   timestamp: Date;

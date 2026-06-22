@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { UserProfile, Post } from '../types';
-import { ChevronLeft, Camera, Pencil, Save, Check, X, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
+import { UserProfile, Post, Testimonial } from '../types';
+import { ChevronLeft, Camera, Pencil, Save, Check, X, Loader2, Lock, Eye, EyeOff, Quote, Archive } from 'lucide-react';
 import { format } from 'date-fns';
 import SpiderLily from './SpiderLily';
 
@@ -14,6 +14,10 @@ interface ProfileViewProps {
     school: string; work: string; hobby: string; interests: string;
     isPublic: boolean; avatar?: string;
   }) => Promise<void>;
+  testimonials?: Testimonial[];
+  canSubmitTestimonial?: boolean;
+  onAddTestimonial?: (content: string) => void | Promise<void>;
+  onSetTestimonialStatus?: (id: string, status: Testimonial['status']) => void | Promise<void>;
 }
 
 const displayName = (profile: UserProfile) => profile.nickname?.trim() || profile.username;
@@ -37,7 +41,10 @@ const resizeImage = (file: File): Promise<string> => new Promise((resolve) => {
   reader.readAsDataURL(file);
 });
 
-const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile, onBack, onSave }) => {
+const ProfileView: React.FC<ProfileViewProps> = ({
+  profile, posts, isOwnProfile, onBack, onSave,
+  testimonials = [], canSubmitTestimonial, onAddTestimonial, onSetTestimonialStatus,
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [firstName, setFirstName] = useState(profile.firstName);
   const [lastName, setLastName] = useState(profile.lastName);
@@ -255,6 +262,17 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
         </div>
 
         {(isOwnProfile || profile.isPublic) && (
+          <TestimonialsSection
+            profileName={displayName(profile)}
+            isOwnProfile={isOwnProfile}
+            testimonials={testimonials}
+            canSubmit={!!canSubmitTestimonial}
+            onAddTestimonial={onAddTestimonial}
+            onSetStatus={onSetTestimonialStatus}
+          />
+        )}
+
+        {(isOwnProfile || profile.isPublic) && (
           <div className="max-w-2xl mx-auto space-y-6">
             <h4 className="text-red-700 text-[10px] font-black uppercase tracking-widest px-2">
               {isOwnProfile ? 'Your Broadcasts' : `${displayName(profile)}'s Broadcasts`}
@@ -275,6 +293,125 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+interface TestimonialsSectionProps {
+  profileName: string;
+  isOwnProfile: boolean;
+  testimonials: Testimonial[];
+  canSubmit: boolean;
+  onAddTestimonial?: (content: string) => void | Promise<void>;
+  onSetStatus?: (id: string, status: Testimonial['status']) => void | Promise<void>;
+}
+
+const TESTIMONIAL_TABS: Testimonial['status'][] = ['pending', 'approved', 'denied', 'archived'];
+
+const TestimonialsSection: React.FC<TestimonialsSectionProps> = ({
+  profileName, isOwnProfile, testimonials, canSubmit, onAddTestimonial, onSetStatus,
+}) => {
+  const [content, setContent] = useState('');
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
+  const [tab, setTab] = useState<Testimonial['status']>('pending');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!content.trim() || !onAddTestimonial) return;
+    setSubmitStatus('submitting');
+    await onAddTestimonial(content.trim());
+    setContent('');
+    setSubmitStatus('success');
+    setTimeout(() => setSubmitStatus('idle'), 1500);
+  };
+
+  const visible = isOwnProfile ? testimonials.filter(t => t.status === tab) : testimonials.filter(t => t.status === 'approved');
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <h4 className="text-red-700 text-[10px] font-black uppercase tracking-widest px-2">Testimonials</h4>
+
+      {canSubmit && (
+        <form onSubmit={handleSubmit} className="bg-[#130303]/60 border border-red-950 rounded-[2rem] p-5 space-y-3">
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder={`Write a testimonial for ${profileName}...`}
+            className="w-full bg-[#050000] border border-red-950 rounded-xl py-3 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-sm h-28 resize-none"
+          />
+          <div className="flex items-center justify-between">
+            <p className="text-[9px] text-red-900 font-black uppercase tracking-widest">Visible once approved by {profileName}</p>
+            <button
+              type="submit"
+              disabled={!content.trim() || submitStatus === 'submitting'}
+              className="px-5 py-2 bg-red-600 text-white font-black uppercase text-[10px] rounded-xl disabled:opacity-50"
+            >
+              {submitStatus === 'submitting' ? 'Submitting...' : submitStatus === 'success' ? 'Submitted' : 'Submit Testimonial'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {isOwnProfile && (
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {TESTIMONIAL_TABS.map((t) => {
+            const count = testimonials.filter(x => x.status === t).length;
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-wider whitespace-nowrap border ${
+                  tab === t ? 'bg-red-600 text-white border-red-600' : 'bg-red-950/40 text-red-800 border-red-900/20'
+                }`}
+              >
+                {t}
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${tab === t ? 'bg-white/20' : 'bg-red-950'}`}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {visible.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-[#130303]/40 border border-dashed border-red-950 rounded-[3rem]">
+          <Quote size={20} className="text-red-900 mb-2" />
+          <p className="text-red-900 text-[10px] font-black uppercase tracking-widest">
+            {isOwnProfile ? `No ${tab} testimonials.` : 'No testimonials yet.'}
+          </p>
+        </div>
+      ) : (
+        visible.map((t) => (
+          <div key={t.id} className="bg-[#130303]/40 border border-red-950/50 rounded-[2.5rem] overflow-hidden p-5 shadow-xl space-y-3">
+            <div className="flex items-center space-x-3">
+              <img src={t.authorAvatar} className="w-9 h-9 rounded-full object-cover" alt={t.authorName} />
+              <div>
+                <h5 className="font-bold text-red-50 text-sm">{t.authorName}</h5>
+                <p className="text-[9px] text-red-900 font-black uppercase tracking-widest">{format(t.timestamp, 'MMM d, yyyy')}</p>
+              </div>
+            </div>
+            <p className="text-red-100 text-sm whitespace-pre-wrap">{t.content}</p>
+            {isOwnProfile && onSetStatus && (
+              <div className="flex gap-2 pt-1">
+                {t.status === 'pending' && (
+                  <>
+                    <button onClick={() => onSetStatus(t.id, 'approved')} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-[10px] font-black uppercase rounded-lg">
+                      <Check size={12} /> Approve
+                    </button>
+                    <button onClick={() => onSetStatus(t.id, 'denied')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a0505] text-red-500 border border-red-950 text-[10px] font-black uppercase rounded-lg">
+                      <X size={12} /> Deny
+                    </button>
+                  </>
+                )}
+                {t.status !== 'archived' && (
+                  <button onClick={() => onSetStatus(t.id, 'archived')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a0505] text-red-800 border border-red-950 text-[10px] font-black uppercase rounded-lg">
+                    <Archive size={12} /> Archive
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))
+      )}
     </div>
   );
 };

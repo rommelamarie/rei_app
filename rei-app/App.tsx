@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { INITIAL_CONTACTS } from './constants';
-import { Contact, Message, AuthStatus, UserProfile, Post } from './types';
+import { Contact, Message, AuthStatus, UserProfile, Post, Testimonial } from './types';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import AuthScreen from './components/AuthScreen';
@@ -60,6 +60,7 @@ const App: React.FC = () => {
   });
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [activeContactId, setActiveContactId] = useState<string | 'community'>(contacts[0].id);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -153,6 +154,35 @@ const App: React.FC = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Load testimonials for the profile currently being viewed and keep them live
+  useEffect(() => {
+    if (view !== 'profile' || !viewingProfileId) { setTestimonials([]); return; }
+    const loadTestimonials = async () => {
+      const { data, error } = await supabase
+        .from('testimonials')
+        .select('*')
+        .eq('profile_id', viewingProfileId)
+        .order('created_at', { ascending: false });
+      if (error) { console.error(error); return; }
+      setTestimonials(data.map((row: any) => ({
+        id: row.id,
+        profileId: row.profile_id,
+        authorId: row.author_id,
+        authorName: row.author_name,
+        authorAvatar: row.author_avatar,
+        content: row.content,
+        status: row.status,
+        timestamp: new Date(row.created_at),
+      })));
+    };
+    loadTestimonials();
+    const channel = supabase
+      .channel(`testimonials_${viewingProfileId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'testimonials', filter: `profile_id=eq.${viewingProfileId}` }, loadTestimonials)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [view, viewingProfileId]);
 
   useEffect(() => {
     messageAudio.current = new Audio(MESSAGE_SOUND_URL);
@@ -326,6 +356,22 @@ const App: React.FC = () => {
     } : prev);
   };
 
+  const handleAddTestimonial = async (profileId: string, content: string) => {
+    const { error } = await supabase.from('testimonials').insert({
+      profile_id: profileId,
+      author_id: myProfile?.id,
+      author_name: displayName(myProfile),
+      author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
+      content,
+    });
+    if (error) console.error(error);
+  };
+
+  const handleSetTestimonialStatus = async (id: string, status: Testimonial['status']) => {
+    const { error } = await supabase.from('testimonials').update({ status }).eq('id', id);
+    if (error) console.error(error);
+  };
+
   if (authStatus === 'unauthenticated') {
     return (
       <AuthScreen
@@ -433,6 +479,10 @@ const App: React.FC = () => {
                 isOwnProfile={isOwnProfile}
                 onSave={isOwnProfile ? handleSaveProfile : undefined}
                 onBack={() => setView('chat')}
+                testimonials={testimonials}
+                canSubmitTestimonial={!isOwnProfile && !!session}
+                onAddTestimonial={(content) => handleAddTestimonial(profile.id, content)}
+                onSetTestimonialStatus={isOwnProfile ? handleSetTestimonialStatus : undefined}
               />
             );
           })()
