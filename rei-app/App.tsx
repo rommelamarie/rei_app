@@ -15,7 +15,7 @@ import NeuralLink from './components/NeuralLink';
 import { generateAIResponse } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 
-const MESSAGE_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2550/2550-preview.mp3';
+const MESSAGE_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/598/598-preview.mp3';
 const DEFAULT_AVATAR = 'https://picsum.photos/seed/user/200';
 
 const mapProfileRow = (row: any): UserProfile => ({
