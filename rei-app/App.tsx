@@ -12,11 +12,23 @@ import SettingsModal from './components/SettingsModal';
 import NewChatModal from './components/NewChatModal';
 import ProfileView from './components/ProfileView';
 import NeuralLink from './components/NeuralLink';
+import CallOverlay, { CallStatus, CallType } from './components/CallOverlay';
 import { generateAIResponse } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 
 const MESSAGE_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/598/598-preview.mp3';
 const DEFAULT_AVATAR = 'https://picsum.photos/seed/user/200';
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+interface CallState {
+  status: CallStatus;
+  callId: string;
+  type: CallType;
+  peerId: string;
+  peerName: string;
+  peerAvatar: string;
+  isCaller: boolean;
+}
 
 const mapProfileRow = (row: any): UserProfile => ({
   id: row.id,
@@ -65,6 +77,18 @@ const App: React.FC = () => {
   const [typingContacts, setTypingContacts] = useState<Set<string>>(new Set());
 
   const messageAudio = useRef<HTMLAudioElement | null>(null);
+
+  // Calling (WebRTC, signaled over Supabase Realtime broadcast)
+  const [callState, setCallState] = useState<CallState | null>(null);
+  const [incomingOffer, setIncomingOffer] = useState<{ callId: string; callerId: string; callerName: string; callerAvatar: string; type: CallType; sdp: RTCSessionDescriptionInit } | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isCameraOff, setIsCameraOff] = useState(false);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const callChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Persist contacts
   useEffect(() => {
@@ -273,9 +297,193 @@ const App: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [session, users]);
 
+  // Listen globally for incoming calls, regardless of which chat is open
+  useEffect(() => {
+    if (!session) return;
+    const myId = session.user.id;
+    const channel = supabase
+      .channel(`user-calls-${myId}`)
+      .on('broadcast', { event: 'call-offer' }, ({ payload }: any) => {
+        if (callState) {
+          // already on a call — let the caller's attempt time out
+          return;
+        }
+        setIncomingOffer(payload);
+        setCallState({
+          status: 'ringing',
+          callId: payload.callId,
+          type: payload.type,
+          peerId: payload.callerId,
+          peerName: payload.callerName,
+          peerAvatar: payload.callerAvatar,
+          isCaller: false,
+        });
+        if (ringtoneRef.current) {
+          ringtoneRef.current.currentTime = 0;
+          ringtoneRef.current.loop = true;
+          ringtoneRef.current.play().catch(() => {});
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [session, callState]);
+
+  const endCallCleanup = useCallback(() => {
+    pcRef.current?.close();
+    pcRef.current = null;
+    localStream?.getTracks().forEach(t => t.stop());
+    setLocalStream(null);
+    setRemoteStream(null);
+    if (callChannelRef.current) { supabase.removeChannel(callChannelRef.current); callChannelRef.current = null; }
+    if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
+    if (ringtoneRef.current) { ringtoneRef.current.pause(); ringtoneRef.current.currentTime = 0; }
+    setIsMuted(false);
+    setIsCameraOff(false);
+    setIncomingOffer(null);
+    setCallState(null);
+  }, [localStream]);
+
+  const sendOnce = (channelName: string, event: string, payload: any) => {
+    const channel = supabase.channel(channelName);
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        channel.send({ type: 'broadcast', event, payload });
+        setTimeout(() => supabase.removeChannel(channel), 3000);
+      }
+    });
+  };
+
+  const createPeerConnection = (callId: string, myId: string): RTCPeerConnection => {
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        callChannelRef.current?.send({ type: 'broadcast', event: 'ice-candidate', payload: { candidate: e.candidate, from: myId } });
+      }
+    };
+    pc.ontrack = (e) => setRemoteStream(e.streams[0]);
+    return pc;
+  };
+
+  const subscribeCallChannel = (callId: string, myId: string) => {
+    const channel = supabase
+      .channel(`call-${callId}`)
+      .on('broadcast', { event: 'answer' }, async ({ payload }: any) => {
+        if (payload.from === myId || !pcRef.current) return;
+        await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
+        setCallState(prev => prev ? { ...prev, status: 'active' } : prev);
+      })
+      .on('broadcast', { event: 'ice-candidate' }, async ({ payload }: any) => {
+        if (payload.from === myId || !pcRef.current) return;
+        try { await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate)); } catch (e) { console.error(e); }
+      })
+      .on('broadcast', { event: 'call-end' }, ({ payload }: any) => {
+        if (payload.from === myId) return;
+        endCallCleanup();
+      })
+      .on('broadcast', { event: 'call-declined' }, ({ payload }: any) => {
+        if (payload.from === myId) return;
+        endCallCleanup();
+      })
+      .subscribe();
+    callChannelRef.current = channel;
+  };
+
+  const handleStartCall = async (contact: Contact, type: CallType) => {
+    if (!contact.profileId || !session) return;
+    if (!connectedIds.has(contact.profileId)) {
+      alert('You can only call people in your Neural Link.');
+      return;
+    }
+    const myId = session.user.id;
+    const callId = crypto.randomUUID();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
+      setLocalStream(stream);
+      setCallState({ status: 'calling', callId, type, peerId: contact.profileId, peerName: contact.name, peerAvatar: contact.avatar, isCaller: true });
+
+      const pc = createPeerConnection(callId, myId);
+      pcRef.current = pc;
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+      subscribeCallChannel(callId, myId);
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      sendOnce(`user-calls-${contact.profileId}`, 'call-offer', {
+        callId, callerId: myId, callerName: displayName(myProfile), callerAvatar: myProfile?.avatar || DEFAULT_AVATAR, type, sdp: offer,
+      });
+
+      callTimeoutRef.current = setTimeout(() => {
+        callChannelRef.current?.send({ type: 'broadcast', event: 'call-end', payload: { from: myId } });
+        endCallCleanup();
+      }, 30000);
+    } catch (err) {
+      console.error(err);
+      alert('Could not access camera/microphone.');
+      endCallCleanup();
+    }
+  };
+
+  const handleAcceptCall = async () => {
+    if (!incomingOffer || !session) return;
+    const myId = session.user.id;
+    const { callId, sdp, type } = incomingOffer;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
+      setLocalStream(stream);
+
+      const pc = createPeerConnection(callId, myId);
+      pcRef.current = pc;
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+      subscribeCallChannel(callId, myId);
+
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      if (ringtoneRef.current) { ringtoneRef.current.pause(); ringtoneRef.current.currentTime = 0; }
+      callChannelRef.current?.send({ type: 'broadcast', event: 'answer', payload: { sdp: answer, from: myId } });
+      setCallState(prev => prev ? { ...prev, status: 'active' } : prev);
+      setIncomingOffer(null);
+    } catch (err) {
+      console.error(err);
+      alert('Could not access camera/microphone.');
+      handleDeclineCall();
+    }
+  };
+
+  const handleDeclineCall = () => {
+    if (incomingOffer && session) {
+      sendOnce(`call-${incomingOffer.callId}`, 'call-declined', { from: session.user.id });
+    }
+    endCallCleanup();
+  };
+
+  const handleEndCall = () => {
+    if (callState && session) {
+      callChannelRef.current?.send({ type: 'broadcast', event: 'call-end', payload: { from: session.user.id } });
+    }
+    endCallCleanup();
+  };
+
+  const handleToggleMute = () => {
+    localStream?.getAudioTracks().forEach(t => { t.enabled = isMuted; });
+    setIsMuted(!isMuted);
+  };
+
+  const handleToggleCamera = () => {
+    localStream?.getVideoTracks().forEach(t => { t.enabled = isCameraOff; });
+    setIsCameraOff(!isCameraOff);
+  };
+
   useEffect(() => {
     messageAudio.current = new Audio(MESSAGE_SOUND_URL);
     messageAudio.current.volume = 0.3;
+    ringtoneRef.current = new Audio(MESSAGE_SOUND_URL);
+    ringtoneRef.current.volume = 0.4;
     if (authStatus !== 'unauthenticated') {
       setShowNeuralOverlay(true);
     }
@@ -507,6 +715,24 @@ const App: React.FC = () => {
         <NeuralBreachOverlay onComplete={() => setShowNeuralOverlay(false)} />
       )}
 
+      {callState && (
+        <CallOverlay
+          status={callState.status}
+          type={callState.type}
+          isCaller={callState.isCaller}
+          peerName={callState.peerName}
+          peerAvatar={callState.peerAvatar}
+          localStream={localStream}
+          remoteStream={remoteStream}
+          isMuted={isMuted}
+          isCameraOff={isCameraOff}
+          onToggleMute={handleToggleMute}
+          onToggleCamera={handleToggleCamera}
+          onAccept={handleAcceptCall}
+          onEnd={callState.status === 'ringing' && !callState.isCaller ? handleDeclineCall : handleEndCall}
+        />
+      )}
+
       {showSettings && (
         <SettingsModal
           isOpen={showSettings}
@@ -664,6 +890,8 @@ const App: React.FC = () => {
               onBack={isMobileView ? () => setShowSidebar(true) : undefined}
               isTyping={typingContacts.has(activeContactId as string)}
               onViewProfile={handleViewProfile}
+              canCall={!!activeContact.profileId && connectedIds.has(activeContact.profileId)}
+              onStartCall={(type) => handleStartCall(activeContact, type)}
             />
           )
         )}

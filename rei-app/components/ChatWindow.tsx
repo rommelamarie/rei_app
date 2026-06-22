@@ -13,9 +13,11 @@ interface ChatWindowProps {
   onBack?: () => void;
   isTyping?: boolean;
   onViewProfile?: (id: string) => void;
+  canCall?: boolean;
+  onStartCall?: (type: 'audio' | 'video') => void;
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ contact, messages, onSendMessage, onMarkRead, onBack, isTyping, onViewProfile }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ contact, messages, onSendMessage, onMarkRead, onBack, isTyping, onViewProfile, canCall, onStartCall }) => {
   const [inputText, setInputText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isCalling, setIsCalling] = useState(false);
@@ -48,8 +50,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ contact, messages, onSendMessag
     setInputText('');
   };
 
+  const handlePhoneClick = () => {
+    if (contact.type === 'ai') { startCall(); return; }
+    if (!canCall) { alert('You can only call people in your Neural Link.'); return; }
+    onStartCall?.('audio');
+  };
+
+  const handleVideoClick = () => {
+    if (contact.type === 'ai') { alert('Core entities support voice link only.'); return; }
+    if (!canCall) { alert('You can only call people in your Neural Link.'); return; }
+    onStartCall?.('video');
+  };
+
   const startCall = async () => {
-    if (contact.type !== 'ai') return alert("Neural link limited to Core entities.");
     setIsCalling(true);
     
     try {
@@ -137,8 +150,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ contact, messages, onSendMessag
           </button>
         </div>
         <div className="flex items-center space-x-1">
-          <button onClick={startCall} className="p-2 text-red-500 hover:bg-red-900/20 rounded-full"><Phone size={20} /></button>
-          <button className="p-2 text-red-500 hover:bg-red-900/20 rounded-full"><Video size={20} /></button>
+          <button onClick={handlePhoneClick} className="p-2 text-red-500 hover:bg-red-900/20 rounded-full"><Phone size={20} /></button>
+          <button onClick={handleVideoClick} className="p-2 text-red-500 hover:bg-red-900/20 rounded-full"><Video size={20} /></button>
         </div>
       </div>
 
