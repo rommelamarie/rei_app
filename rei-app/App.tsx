@@ -304,6 +304,7 @@ const App: React.FC = () => {
     const channel = supabase
       .channel(`user-calls-${myId}`)
       .on('broadcast', { event: 'call-offer' }, ({ payload }: any) => {
+        console.log('[call] received call-offer', payload);
         if (callState) {
           // already on a call — let the caller's attempt time out
           return;
@@ -318,15 +319,27 @@ const App: React.FC = () => {
           peerAvatar: payload.callerAvatar,
           isCaller: false,
         });
-        if (ringtoneRef.current) {
-          ringtoneRef.current.currentTime = 0;
-          ringtoneRef.current.loop = true;
-          ringtoneRef.current.play().catch(() => {});
-        }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[call] global listener status:', status, `user-calls-${myId}`);
+      });
     return () => { supabase.removeChannel(channel); };
   }, [session, callState]);
+
+  // Single source of truth for the ring/ring-back tone: play while calling
+  // (caller) or ringing (callee), stop the moment that's no longer true.
+  useEffect(() => {
+    const shouldRing = callState?.status === 'calling' || (callState?.status === 'ringing' && !callState.isCaller);
+    if (!ringtoneRef.current) return;
+    if (shouldRing) {
+      ringtoneRef.current.currentTime = 0;
+      ringtoneRef.current.loop = true;
+      ringtoneRef.current.play().catch(() => {});
+    } else {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
+  }, [callState?.status, callState?.isCaller]);
 
   const endCallCleanup = useCallback(() => {
     pcRef.current?.close();
@@ -346,9 +359,14 @@ const App: React.FC = () => {
   const sendOnce = (channelName: string, event: string, payload: any) => {
     const channel = supabase.channel(channelName);
     channel.subscribe((status) => {
+      console.log(`[call] sendOnce(${channelName}, ${event}) status:`, status);
       if (status === 'SUBSCRIBED') {
-        channel.send({ type: 'broadcast', event, payload });
+        channel.send({ type: 'broadcast', event, payload }).then((res) => {
+          console.log(`[call] sendOnce(${channelName}, ${event}) send result:`, res);
+        });
         setTimeout(() => supabase.removeChannel(channel), 3000);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.error(`[call] sendOnce(${channelName}, ${event}) failed to subscribe:`, status);
       }
     });
   };
