@@ -11,8 +11,6 @@ interface AdminDashboardProps {
   users: UserProfile[];
   onKick: (id: string) => void;
   onViewProfile?: (id: string) => void;
-  onUpdateKey?: (newKey: string) => void;
-  currentKey?: string;
   onBack?: () => void;
 }
 

@@ -12,22 +12,19 @@ interface SettingsModalProps {
     avatar: string;
     isAdmin: boolean;
   };
-  onUpdateProfile: (updates: { username?: string; avatar?: string; password?: string }) => void | Promise<void>;
-  terminalKey: string;
+  onUpdateProfile: (updates: { username?: string; avatar?: string }) => void | Promise<void>;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  isOnline, 
-  onToggleStatus, 
-  currentUser, 
+const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
+  onClose,
+  isOnline,
+  onToggleStatus,
+  currentUser,
   onUpdateProfile,
-  terminalKey
 }) => {
   const [username, setUsername] = useState(currentUser.username);
   const [avatar, setAvatar] = useState(currentUser.avatar);
-  const [password, setPassword] = useState(terminalKey);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,7 +57,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setSaveStatus('saving');
     setErrorMessage(null);
     try {
-      await onUpdateProfile({ username, avatar, password });
+      await onUpdateProfile({ username, avatar });
       setSaveStatus('success');
       setTimeout(() => {
         setSaveStatus('idle');

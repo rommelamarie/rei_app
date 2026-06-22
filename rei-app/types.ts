@@ -67,6 +67,7 @@ export interface UserProfile {
   hobby?: string;
   interests?: string;
   isPublic: boolean;
+  role: 'user' | 'admin';
   joinedAt: Date;
 }
 

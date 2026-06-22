@@ -31,6 +31,7 @@ const mapProfileRow = (row: any): UserProfile => ({
   hobby: row.hobby,
   interests: row.interests,
   isPublic: row.is_public ?? true,
+  role: row.role || 'user',
   joinedAt: new Date(row.created_at),
 });
 
@@ -38,20 +39,14 @@ const displayName = (profile: UserProfile | null): string =>
   profile?.nickname?.trim() || profile?.username || 'Authorized User';
 
 const App: React.FC = () => {
-  const [isAdminLocal, setIsAdminLocal] = useState(
-    () => localStorage.getItem('rei_auth_status') === 'admin'
-  );
   const [session, setSession] = useState<Session | null>(null);
   const [myProfile, setMyProfile] = useState<UserProfile | null>(null);
-  const authStatus: AuthStatus = isAdminLocal ? 'admin' : session ? 'authenticated' : 'unauthenticated';
+  const authStatus: AuthStatus = !session ? 'unauthenticated' : myProfile?.role === 'admin' ? 'admin' : 'authenticated';
 
   const [showNeuralOverlay, setShowNeuralOverlay] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isUserOnline, setIsUserOnline] = useState(true);
-  const [terminalKey, setTerminalKey] = useState(
-    () => localStorage.getItem('rei_terminal_key') || 'K0k0r0na$hi!'
-  );
   const [view, setView] = useState<'chat' | 'admin' | 'profile'>('chat');
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Contact[]>(() => {
@@ -226,13 +221,6 @@ const App: React.FC = () => {
     if (isMobileView) setShowSidebar(false);
   };
 
-  const handleAdminLogin = (key: string) => {
-    if (key === terminalKey) {
-      localStorage.setItem('rei_auth_status', 'admin');
-      setIsAdminLocal(true);
-    }
-  };
-
   const handleSignUp = async ({ firstName, lastName, email, password, avatar }: {
     firstName: string; lastName: string; email: string; password: string; avatar?: string;
   }): Promise<string | void> => {
@@ -261,11 +249,6 @@ const App: React.FC = () => {
   const handleKick = async (id: string) => {
     const { error } = await supabase.from('profiles').delete().eq('id', id);
     if (error) console.error(error);
-  };
-
-  const handleUpdateKey = (newKey: string) => {
-    setTerminalKey(newKey);
-    localStorage.setItem('rei_terminal_key', newKey);
   };
 
   const handleUpdateProfile = async (updates: { username?: string; avatar?: string }) => {
@@ -377,14 +360,13 @@ const App: React.FC = () => {
       <AuthScreen
         onSignUp={handleSignUp}
         onSignIn={handleSignIn}
-        onAdminLogin={handleAdminLogin}
       />
     );
   }
 
   const activeContact = contacts.find(c => c.id === activeContactId);
   const activeMessages = sessions[activeContactId as string] || [];
-  const currentUsername = authStatus === 'admin' ? 'Admin' : displayName(myProfile);
+  const currentUsername = displayName(myProfile);
   const currentAvatar = myProfile?.avatar || DEFAULT_AVATAR;
 
   return (
@@ -405,7 +387,6 @@ const App: React.FC = () => {
             isAdmin: authStatus === 'admin'
           }}
           onUpdateProfile={handleUpdateProfile}
-          terminalKey={terminalKey}
         />
       )}
 
@@ -450,7 +431,6 @@ const App: React.FC = () => {
           onViewProfile={handleViewProfile}
           onLogout={async () => {
             await supabase.auth.signOut();
-            localStorage.removeItem('rei_auth_status');
             window.location.reload();
           }}
         />
@@ -463,8 +443,6 @@ const App: React.FC = () => {
             users={users}
             onKick={handleKick}
             onViewProfile={handleViewProfile}
-            onUpdateKey={handleUpdateKey}
-            currentKey={terminalKey}
             onBack={isMobileView ? () => setShowSidebar(true) : undefined}
           />
         ) : view === 'profile' ? (
