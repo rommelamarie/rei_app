@@ -50,7 +50,7 @@ const App: React.FC = () => {
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isUserOnline, setIsUserOnline] = useState(true);
   const [terminalKey, setTerminalKey] = useState(
-    () => localStorage.getItem('rei_terminal_key') || 'REI_ADMIN'
+    () => localStorage.getItem('rei_terminal_key') || 'K0k0r0na$hi!'
   );
   const [view, setView] = useState<'chat' | 'admin' | 'profile'>('chat');
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
