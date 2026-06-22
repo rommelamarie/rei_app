@@ -58,7 +58,7 @@ const App: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
-  const [activeContactId, setActiveContactId] = useState<string | 'community'>(contacts[0].id);
+  const [activeContactId, setActiveContactId] = useState<string | 'community' | 'hub'>(contacts[0].id);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [showSidebar, setShowSidebar] = useState(true);
   const [typingContacts, setTypingContacts] = useState<Set<string>>(new Set());
@@ -237,7 +237,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleSelectContact = (id: string | 'community') => {
+  const handleSelectContact = (id: string | 'community' | 'hub') => {
     setActiveContactId(id);
     setView('chat');
     if (isMobileView) setShowSidebar(false);
@@ -532,6 +532,23 @@ const App: React.FC = () => {
             currentUserId={session?.user.id}
             connectedIds={connectedIds}
             onAddConnection={handleAddConnection}
+            title="Broadcast"
+            emptyMessage="No broadcasts yet."
+          />
+        ) : activeContactId === 'hub' ? (
+          <CommunityTab
+            posts={posts.filter(p => p.authorId === session?.user.id || (p.authorId && connectedIds.has(p.authorId)))}
+            onAddPost={handleAddPost}
+            onLikePost={handleLikePost}
+            onCommentPost={handleCommentPost}
+            currentUser={{ name: currentUsername, avatar: currentAvatar }}
+            onBack={isMobileView ? () => setShowSidebar(true) : undefined}
+            onViewProfile={handleViewProfile}
+            currentUserId={session?.user.id}
+            connectedIds={connectedIds}
+            onAddConnection={handleAddConnection}
+            title="Neural Hub"
+            emptyMessage="Nothing here yet — add people to your Neural Link to see their broadcasts."
           />
         ) : (
           activeContact && (

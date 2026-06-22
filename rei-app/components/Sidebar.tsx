@@ -5,8 +5,8 @@ import SpiderLily from './SpiderLily';
 
 interface SidebarProps {
   contacts: Contact[];
-  activeContactId: string | 'community';
-  onSelectContact: (id: string | 'community') => void;
+  activeContactId: string | 'community' | 'hub';
+  onSelectContact: (id: string | 'community' | 'hub') => void;
   isAdmin?: boolean;
   pendingCount?: number;
   typingContacts?: Set<string>;
@@ -151,9 +151,9 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-1">
-          <FilterButton active={activeContactId === 'community'} onClick={() => onSelectContact('community')} icon={<Globe size={14}/>} label="Hub" />
-          <FilterButton active={filter === 'all' && activeContactId !== 'community'} onClick={() => setFilter('all')} icon={<MessageSquare size={14}/>} label="Broadcast" />
-          <FilterButton active={filter === 'bot'} onClick={() => setFilter('bot')} icon={<Bot size={14}/>} label="Cores" />
+          <FilterButton active={activeContactId === 'hub'} onClick={() => onSelectContact('hub')} icon={<Globe size={14}/>} label="Hub" />
+          <FilterButton active={activeContactId === 'community'} onClick={() => onSelectContact('community')} icon={<MessageSquare size={14}/>} label="Broadcast" />
+          <FilterButton active={filter === 'bot'} onClick={() => setFilter(filter === 'bot' ? 'all' : 'bot')} icon={<Bot size={14}/>} label="Cores" />
         </div>
       </div>
 

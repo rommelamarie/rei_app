@@ -18,6 +18,8 @@ interface CommunityTabProps {
   currentUserId?: string;
   connectedIds?: Set<string>;
   onAddConnection?: (userId: string) => void;
+  title?: string;
+  emptyMessage?: string;
 }
 
 const CommunityTab: React.FC<CommunityTabProps> = ({ 
@@ -33,7 +35,9 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
   onViewProfile,
   currentUserId,
   connectedIds = new Set(),
-  onAddConnection
+  onAddConnection,
+  title = 'Community Hub',
+  emptyMessage = 'No broadcasts yet.'
 }) => {
   const [content, setContent] = useState('');
   const [mediaPreview, setMediaPreview] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
@@ -100,7 +104,7 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
         <div className="flex items-center">
           {onBack && <button onClick={onBack} className="mr-3 p-1 text-red-500"><ChevronLeft size={24}/></button>}
           <div>
-            <h2 className="font-black text-red-600 text-xl tracking-tighter uppercase">Community Hub</h2>
+            <h2 className="font-black text-red-600 text-xl tracking-tighter uppercase">{title}</h2>
           </div>
         </div>
       </div>
@@ -123,6 +127,11 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
         </div>
 
         <div className="max-w-2xl mx-auto space-y-6">
+          {posts.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 bg-[#130303]/40 border border-dashed border-red-950 rounded-[3rem]">
+              <p className="text-red-900 text-[10px] font-black uppercase tracking-widest text-center px-6">{emptyMessage}</p>
+            </div>
+          )}
           {posts.map((post) => (
             <div key={post.id} className="bg-[#130303]/40 border border-red-950/50 rounded-[2.5rem] overflow-hidden p-5 shadow-xl">
               <button
