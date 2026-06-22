@@ -9,8 +9,13 @@ interface ProfileViewProps {
   posts: Post[];
   isOwnProfile: boolean;
   onBack?: () => void;
-  onSave?: (updates: { firstName: string; lastName: string; bio: string; avatar?: string }) => Promise<void>;
+  onSave?: (updates: {
+    firstName: string; lastName: string; nickname: string; bio: string;
+    school: string; work: string; hobby: string; interests: string; avatar?: string;
+  }) => Promise<void>;
 }
+
+const displayName = (profile: UserProfile) => profile.nickname?.trim() || profile.username;
 
 const resizeImage = (file: File): Promise<string> => new Promise((resolve) => {
   const reader = new FileReader();
@@ -35,7 +40,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
   const [isEditing, setIsEditing] = useState(false);
   const [firstName, setFirstName] = useState(profile.firstName);
   const [lastName, setLastName] = useState(profile.lastName);
+  const [nickname, setNickname] = useState(profile.nickname || '');
   const [bio, setBio] = useState(profile.bio || '');
+  const [school, setSchool] = useState(profile.school || '');
+  const [work, setWork] = useState(profile.work || '');
+  const [hobby, setHobby] = useState(profile.hobby || '');
+  const [interests, setInterests] = useState(profile.interests || '');
   const [avatar, setAvatar] = useState(profile.avatar);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -50,7 +60,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
   const startEditing = () => {
     setFirstName(profile.firstName);
     setLastName(profile.lastName);
+    setNickname(profile.nickname || '');
     setBio(profile.bio || '');
+    setSchool(profile.school || '');
+    setWork(profile.work || '');
+    setHobby(profile.hobby || '');
+    setInterests(profile.interests || '');
     setAvatar(profile.avatar);
     setSaveStatus('idle');
     setIsEditing(true);
@@ -62,7 +77,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
     setSaveStatus('saving');
     setErrorMessage(null);
     try {
-      await onSave({ firstName, lastName, bio, avatar });
+      await onSave({ firstName, lastName, nickname, bio, school, work, hobby, interests, avatar });
       setSaveStatus('success');
       setTimeout(() => {
         setSaveStatus('idle');
@@ -128,12 +143,45 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
                   className="flex-1 bg-[#050000] border border-red-950 rounded-xl py-3 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-sm font-bold"
                 />
               </div>
+              <input
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="Nickname (shown on profile & broadcasts instead of your name)"
+                maxLength={40}
+                className="w-full bg-[#050000] border border-red-950 rounded-xl py-3 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-sm font-bold"
+              />
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="Synchronization intent... (bio)"
                 maxLength={280}
                 className="w-full bg-[#050000] border border-red-950 rounded-xl py-3 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-sm h-24 resize-none"
+              />
+              <div className="flex gap-3">
+                <input
+                  value={school}
+                  onChange={(e) => setSchool(e.target.value)}
+                  placeholder="School"
+                  className="flex-1 bg-[#050000] border border-red-950 rounded-xl py-3 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-sm"
+                />
+                <input
+                  value={work}
+                  onChange={(e) => setWork(e.target.value)}
+                  placeholder="Work"
+                  className="flex-1 bg-[#050000] border border-red-950 rounded-xl py-3 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-sm"
+                />
+              </div>
+              <input
+                value={hobby}
+                onChange={(e) => setHobby(e.target.value)}
+                placeholder="Hobby"
+                className="w-full bg-[#050000] border border-red-950 rounded-xl py-3 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-sm"
+              />
+              <input
+                value={interests}
+                onChange={(e) => setInterests(e.target.value)}
+                placeholder="Interests"
+                className="w-full bg-[#050000] border border-red-950 rounded-xl py-3 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-sm"
               />
               {saveStatus === 'error' && (
                 <p className="text-red-500 text-xs font-bold text-center">{errorMessage}</p>
@@ -159,19 +207,31 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
             </form>
           ) : (
             <div className="flex flex-col items-center text-center">
-              <img src={profile.avatar} className="w-24 h-24 rounded-full border-2 border-red-600 p-1 object-cover mb-4" alt={profile.username} />
-              <h3 className="text-2xl font-black text-red-50 tracking-tighter uppercase">{profile.username}</h3>
+              <img src={profile.avatar} className="w-24 h-24 rounded-full border-2 border-red-600 p-1 object-cover mb-4" alt={displayName(profile)} />
+              <h3 className="text-2xl font-black text-red-50 tracking-tighter uppercase">{displayName(profile)}</h3>
+              {profile.nickname && (
+                <p className="text-red-800 text-xs font-bold">{profile.username}</p>
+              )}
               <p className="text-[10px] text-red-900 font-black uppercase tracking-widest mt-1">
                 Member since {format(profile.joinedAt, 'MMMM yyyy')}
               </p>
               {profile.bio && <p className="text-red-200 text-sm mt-4 max-w-md">{profile.bio}</p>}
+
+              {(profile.school || profile.work || profile.hobby || profile.interests) && (
+                <div className="grid grid-cols-2 gap-3 mt-5 w-full max-w-md text-left">
+                  {profile.school && <ProfileFact label="School" value={profile.school} />}
+                  {profile.work && <ProfileFact label="Work" value={profile.work} />}
+                  {profile.hobby && <ProfileFact label="Hobby" value={profile.hobby} />}
+                  {profile.interests && <ProfileFact label="Interests" value={profile.interests} />}
+                </div>
+              )}
             </div>
           )}
         </div>
 
         <div className="max-w-2xl mx-auto space-y-6">
           <h4 className="text-red-700 text-[10px] font-black uppercase tracking-widest px-2">
-            {isOwnProfile ? 'Your Broadcasts' : `${profile.username}'s Broadcasts`}
+            {isOwnProfile ? 'Your Broadcasts' : `${displayName(profile)}'s Broadcasts`}
           </h4>
           {posts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 bg-[#130303]/40 border border-dashed border-red-950 rounded-[3rem]">
@@ -191,5 +251,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({ profile, posts, isOwnProfile,
     </div>
   );
 };
+
+const ProfileFact: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="bg-[#0a0101] border border-red-950 rounded-xl px-3 py-2">
+    <p className="text-[9px] text-red-900 font-black uppercase tracking-widest">{label}</p>
+    <p className="text-red-100 text-sm font-medium truncate">{value}</p>
+  </div>
+);
 
 export default ProfileView;

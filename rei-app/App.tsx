@@ -24,9 +24,17 @@ const mapProfileRow = (row: any): UserProfile => ({
   lastName: row.last_name,
   email: row.email,
   avatar: row.avatar,
+  nickname: row.nickname,
   bio: row.bio,
+  school: row.school,
+  work: row.work,
+  hobby: row.hobby,
+  interests: row.interests,
   joinedAt: new Date(row.created_at),
 });
+
+const displayName = (profile: UserProfile | null): string =>
+  profile?.nickname?.trim() || profile?.username || 'Authorized User';
 
 const App: React.FC = () => {
   const [isAdminLocal, setIsAdminLocal] = useState(
@@ -242,7 +250,7 @@ const App: React.FC = () => {
   const handleAddPost = async (content: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
     const { error } = await supabase.from('posts').insert({
       author_id: myProfile?.id,
-      author_name: myProfile?.username || 'Authorized User',
+      author_name: displayName(myProfile),
       author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
       content,
       media_url: mediaUrl,
@@ -266,7 +274,7 @@ const App: React.FC = () => {
     const { error } = await supabase.from('comments').insert({
       post_id: postId,
       author_id: myProfile?.id,
-      author_name: myProfile?.username || 'Authorized User',
+      author_name: displayName(myProfile),
       author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
       content,
     });
@@ -279,11 +287,24 @@ const App: React.FC = () => {
     if (isMobileView) setShowSidebar(false);
   };
 
-  const handleSaveProfile = async (updates: { firstName: string; lastName: string; bio: string; avatar?: string }) => {
+  const handleSaveProfile = async (updates: {
+    firstName: string; lastName: string; nickname: string; bio: string;
+    school: string; work: string; hobby: string; interests: string; avatar?: string;
+  }) => {
     if (!session) return;
     const { error } = await supabase
       .from('profiles')
-      .update({ first_name: updates.firstName, last_name: updates.lastName, bio: updates.bio, avatar: updates.avatar })
+      .update({
+        first_name: updates.firstName,
+        last_name: updates.lastName,
+        nickname: updates.nickname,
+        bio: updates.bio,
+        school: updates.school,
+        work: updates.work,
+        hobby: updates.hobby,
+        interests: updates.interests,
+        avatar: updates.avatar,
+      })
       .eq('id', session.user.id);
     if (error) throw error;
     setMyProfile(prev => prev ? {
@@ -291,7 +312,12 @@ const App: React.FC = () => {
       firstName: updates.firstName,
       lastName: updates.lastName,
       username: `${updates.firstName} ${updates.lastName}`.trim(),
+      nickname: updates.nickname,
       bio: updates.bio,
+      school: updates.school,
+      work: updates.work,
+      hobby: updates.hobby,
+      interests: updates.interests,
       avatar: updates.avatar,
     } : prev);
   };
@@ -308,7 +334,7 @@ const App: React.FC = () => {
 
   const activeContact = contacts.find(c => c.id === activeContactId);
   const activeMessages = sessions[activeContactId as string] || [];
-  const currentUsername = authStatus === 'admin' ? 'Admin' : (myProfile?.username || 'Authorized User');
+  const currentUsername = authStatus === 'admin' ? 'Admin' : displayName(myProfile);
   const currentAvatar = myProfile?.avatar || DEFAULT_AVATAR;
 
   return (

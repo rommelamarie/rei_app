@@ -59,7 +59,12 @@ export interface UserProfile {
   lastName: string;
   email: string;
   avatar?: string;
+  nickname?: string;
   bio?: string;
+  school?: string;
+  work?: string;
+  hobby?: string;
+  interests?: string;
   joinedAt: Date;
 }
 
