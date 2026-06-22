@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { INITIAL_CONTACTS } from './constants';
-import { Contact, Message, AuthStatus, UserProfile, Post, Testimonial } from './types';
+import { Contact, Message, AuthStatus, UserProfile, Post, Testimonial, ConnectionRequest } from './types';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import AuthScreen from './components/AuthScreen';
@@ -70,6 +70,7 @@ const App: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
+  const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
   const [directMessages, setDirectMessages] = useState<Message[]>([]);
   const [activeContactId, setActiveContactId] = useState<string | 'community' | 'hub'>(contacts[0].id);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
@@ -222,6 +223,34 @@ const App: React.FC = () => {
     const channel = supabase
       .channel(`connections_${session.user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'connections', filter: `user_id=eq.${session.user.id}` }, loadConnections)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [session]);
+
+  // Load Neural Link requests (sent or received by me) and keep them live
+  useEffect(() => {
+    if (!session) { setConnectionRequests([]); return; }
+    const myId = session.user.id;
+    const mapRequestRow = (row: any): ConnectionRequest => ({
+      id: row.id,
+      senderId: row.sender_id,
+      recipientId: row.recipient_id,
+      status: row.status,
+      timestamp: new Date(row.created_at),
+    });
+    const loadRequests = async () => {
+      const { data, error } = await supabase
+        .from('connection_requests')
+        .select('*')
+        .or(`sender_id.eq.${myId},recipient_id.eq.${myId}`)
+        .order('created_at', { ascending: false });
+      if (error) { console.error(error); return; }
+      setConnectionRequests(data.map(mapRequestRow));
+    };
+    loadRequests();
+    const channel = supabase
+      .channel(`connection_requests_${myId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'connection_requests' }, loadRequests)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [session]);
@@ -683,11 +712,39 @@ const App: React.FC = () => {
     if (error) console.error(error);
   };
 
-  const handleAddConnection = async (connectionId: string) => {
+  const addConnectionBothWays = async (otherId: string) => {
     if (!session) return;
+    const myId = session.user.id;
     const { error } = await supabase
       .from('connections')
-      .upsert({ user_id: session.user.id, connection_id: connectionId }, { onConflict: 'user_id,connection_id', ignoreDuplicates: true });
+      .upsert([
+        { user_id: myId, connection_id: otherId },
+        { user_id: otherId, connection_id: myId },
+      ], { onConflict: 'user_id,connection_id', ignoreDuplicates: true });
+    if (error) console.error(error);
+  };
+
+  const handleSendConnectionRequest = async (recipientId: string) => {
+    if (!session) return;
+    const { error } = await supabase
+      .from('connection_requests')
+      .upsert({ sender_id: session.user.id, recipient_id: recipientId, status: 'pending' }, { onConflict: 'sender_id,recipient_id' });
+    if (error) console.error(error);
+  };
+
+  const handleAcceptConnectionRequest = async (requestId: string, otherId: string) => {
+    const { error } = await supabase.from('connection_requests').update({ status: 'accepted' }).eq('id', requestId);
+    if (error) { console.error(error); return; }
+    await addConnectionBothWays(otherId);
+  };
+
+  const handleDeclineConnectionRequest = async (requestId: string) => {
+    const { error } = await supabase.from('connection_requests').update({ status: 'declined' }).eq('id', requestId);
+    if (error) console.error(error);
+  };
+
+  const handleCancelConnectionRequest = async (requestId: string) => {
+    const { error } = await supabase.from('connection_requests').delete().eq('id', requestId);
     if (error) console.error(error);
   };
 
@@ -726,6 +783,17 @@ const App: React.FC = () => {
     : sessions[activeContactId as string] || [];
   const currentUsername = displayName(myProfile);
   const currentAvatar = myProfile?.avatar || DEFAULT_AVATAR;
+
+  const myId = session?.user.id;
+  const pendingOutgoing = connectionRequests.filter(r => r.senderId === myId && r.status === 'pending');
+  const pendingIncoming = connectionRequests.filter(r => r.recipientId === myId && r.status === 'pending');
+  const pendingOutgoingIds = new Set(pendingOutgoing.map(r => r.recipientId));
+  const incomingRequestEntries = pendingIncoming
+    .map(r => ({ requestId: r.id, profile: users.find(u => u.id === r.senderId) }))
+    .filter((e): e is { requestId: string; profile: UserProfile } => !!e.profile);
+  const outgoingRequestEntries = pendingOutgoing
+    .map(r => ({ requestId: r.id, profile: users.find(u => u.id === r.recipientId) }))
+    .filter((e): e is { requestId: string; profile: UserProfile } => !!e.profile);
 
   return (
     <div className="flex h-[100dvh] w-full bg-[#050000] text-red-50 overflow-hidden relative">
@@ -825,8 +893,13 @@ const App: React.FC = () => {
         ) : view === 'neural-link' ? (
           <NeuralLink
             connections={users.filter(u => connectedIds.has(u.id))}
+            incomingRequests={incomingRequestEntries}
+            outgoingRequests={outgoingRequestEntries}
             onViewProfile={handleViewProfile}
             onRemoveConnection={handleRemoveConnection}
+            onAcceptRequest={handleAcceptConnectionRequest}
+            onDeclineRequest={handleDeclineConnectionRequest}
+            onCancelRequest={handleCancelConnectionRequest}
             onBack={isMobileView ? () => setShowSidebar(true) : undefined}
           />
         ) : view === 'profile' ? (
@@ -834,6 +907,7 @@ const App: React.FC = () => {
             const profile = users.find(u => u.id === viewingProfileId) || (myProfile?.id === viewingProfileId ? myProfile : null);
             if (!profile) return null;
             const isOwnProfile = session?.user.id === viewingProfileId;
+            const incomingReq = pendingIncoming.find(r => r.senderId === profile.id);
             return (
               <ProfileView
                 profile={profile}
@@ -846,7 +920,11 @@ const App: React.FC = () => {
                 onAddTestimonial={(content) => handleAddTestimonial(profile.id, content)}
                 onSetTestimonialStatus={isOwnProfile ? handleSetTestimonialStatus : undefined}
                 isConnected={connectedIds.has(profile.id)}
-                onAddConnection={!isOwnProfile && session ? () => handleAddConnection(profile.id) : undefined}
+                hasSentRequest={pendingOutgoingIds.has(profile.id)}
+                incomingRequestId={incomingReq?.id}
+                onSendConnectionRequest={!isOwnProfile && session ? () => handleSendConnectionRequest(profile.id) : undefined}
+                onAcceptConnectionRequest={(requestId) => handleAcceptConnectionRequest(requestId, profile.id)}
+                onDeclineConnectionRequest={handleDeclineConnectionRequest}
               />
             );
           })()
@@ -861,7 +939,8 @@ const App: React.FC = () => {
             onViewProfile={handleViewProfile}
             currentUserId={session?.user.id}
             connectedIds={connectedIds}
-            onAddConnection={handleAddConnection}
+            pendingRequestIds={pendingOutgoingIds}
+            onSendConnectionRequest={handleSendConnectionRequest}
             title="Broadcast"
             emptyMessage="No broadcasts yet."
           />
@@ -876,7 +955,8 @@ const App: React.FC = () => {
             onViewProfile={handleViewProfile}
             currentUserId={session?.user.id}
             connectedIds={connectedIds}
-            onAddConnection={handleAddConnection}
+            pendingRequestIds={pendingOutgoingIds}
+            onSendConnectionRequest={handleSendConnectionRequest}
             title="Neural Hub"
             emptyMessage="Nothing here yet — add people to your Neural Link to see their broadcasts."
           />

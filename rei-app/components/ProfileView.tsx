@@ -19,7 +19,11 @@ interface ProfileViewProps {
   onAddTestimonial?: (content: string) => void | Promise<void>;
   onSetTestimonialStatus?: (id: string, status: Testimonial['status']) => void | Promise<void>;
   isConnected?: boolean;
-  onAddConnection?: () => void;
+  hasSentRequest?: boolean;
+  incomingRequestId?: string;
+  onSendConnectionRequest?: () => void;
+  onAcceptConnectionRequest?: (requestId: string) => void;
+  onDeclineConnectionRequest?: (requestId: string) => void;
 }
 
 const displayName = (profile: UserProfile) => profile.nickname?.trim() || profile.username;
@@ -46,7 +50,7 @@ const resizeImage = (file: File): Promise<string> => new Promise((resolve) => {
 const ProfileView: React.FC<ProfileViewProps> = ({
   profile, posts, isOwnProfile, onBack, onSave,
   testimonials = [], canSubmitTestimonial, onAddTestimonial, onSetTestimonialStatus,
-  isConnected, onAddConnection,
+  isConnected, hasSentRequest, incomingRequestId, onSendConnectionRequest, onAcceptConnectionRequest, onDeclineConnectionRequest,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [firstName, setFirstName] = useState(profile.firstName);
@@ -126,12 +130,31 @@ const ProfileView: React.FC<ProfileViewProps> = ({
             <span className="flex items-center gap-2 px-4 py-2 text-red-600 border border-red-900/30 rounded-xl text-xs font-black uppercase tracking-widest">
               <Link2 size={14} /> Linked
             </span>
-          ) : onAddConnection && (
+          ) : incomingRequestId ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => onAcceptConnectionRequest?.(incomingRequestId)}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest"
+              >
+                <Check size={14} /> Accept
+              </button>
+              <button
+                onClick={() => onDeclineConnectionRequest?.(incomingRequestId)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#1a0505] text-red-500 border border-red-950 rounded-xl text-xs font-black uppercase tracking-widest"
+              >
+                <X size={14} /> Decline
+              </button>
+            </div>
+          ) : hasSentRequest ? (
+            <span className="flex items-center gap-2 px-4 py-2 text-red-800 border border-red-900/30 rounded-xl text-xs font-black uppercase tracking-widest">
+              Request Sent
+            </span>
+          ) : onSendConnectionRequest && (
             <button
-              onClick={onAddConnection}
+              onClick={onSendConnectionRequest}
               className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest"
             >
-              <UserPlus size={14} /> Add to Neural Link
+              <UserPlus size={14} /> Send Neural Link Request
             </button>
           )
         )}

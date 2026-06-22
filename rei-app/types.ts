@@ -92,6 +92,14 @@ export interface Connection {
   createdAt: Date;
 }
 
+export interface ConnectionRequest {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  status: 'pending' | 'accepted' | 'declined';
+  timestamp: Date;
+}
+
 export interface ActivityLog {
   id: string;
   timestamp: Date;

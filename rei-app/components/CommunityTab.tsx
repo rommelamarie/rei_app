@@ -17,7 +17,8 @@ interface CommunityTabProps {
   onViewProfile?: (userId: string) => void;
   currentUserId?: string;
   connectedIds?: Set<string>;
-  onAddConnection?: (userId: string) => void;
+  pendingRequestIds?: Set<string>;
+  onSendConnectionRequest?: (userId: string) => void;
   title?: string;
   emptyMessage?: string;
 }
@@ -35,7 +36,8 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
   onViewProfile,
   currentUserId,
   connectedIds = new Set(),
-  onAddConnection,
+  pendingRequestIds = new Set(),
+  onSendConnectionRequest,
   title = 'Community Hub',
   emptyMessage = 'No broadcasts yet.'
 }) => {
@@ -156,12 +158,16 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
                     <span className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 text-[10px] font-black uppercase rounded-lg border border-red-900/30">
                       <Link2 size={12} /> Linked
                     </span>
+                  ) : pendingRequestIds.has(post.authorId) ? (
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 text-red-800 text-[10px] font-black uppercase rounded-lg border border-red-900/30">
+                      Request Sent
+                    </span>
                   ) : (
                     <button
-                      onClick={() => onAddConnection?.(post.authorId!)}
+                      onClick={() => onSendConnectionRequest?.(post.authorId!)}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-[10px] font-black uppercase rounded-lg flex-shrink-0"
                     >
-                      <UserPlus size={12} /> Add to Neural Link
+                      <UserPlus size={12} /> Send Request
                     </button>
                   )}
                 </div>
