@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Contact } from '../types';
-import { Search, MoreVertical, Edit, MessageSquare, Bot, Settings, LogOut, ShieldAlert, Download, Globe, Loader2, User } from 'lucide-react';
+import { Search, MoreVertical, Edit, MessageSquare, Bot, Settings, LogOut, ShieldAlert, Download, Globe, Loader2, User, Link2 } from 'lucide-react';
 import SpiderLily from './SpiderLily';
 
 interface SidebarProps {
@@ -14,6 +14,7 @@ interface SidebarProps {
   onOpenSettings?: () => void;
   onOpenNewChat?: () => void;
   onOpenProfile?: () => void;
+  onOpenNeuralLink?: () => void;
   onViewProfile?: (id: string) => void;
   onLogout?: () => void;
 }
@@ -29,6 +30,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onOpenNewChat,
   onOpenProfile,
+  onOpenNeuralLink,
   onViewProfile,
   onLogout
 }) => {
@@ -115,6 +117,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                     className="w-full flex items-center px-5 py-4 text-sm text-red-100 hover:bg-red-900/30 transition-colors"
                   >
                     <User size={16} className="mr-3 text-red-500" /> My Profile
+                  </button>
+                  <button
+                    onClick={() => { setShowMenu(false); onOpenNeuralLink?.(); }}
+                    className="w-full flex items-center px-5 py-4 text-sm text-red-100 hover:bg-red-900/30 transition-colors"
+                  >
+                    <Link2 size={16} className="mr-3 text-red-500" /> Neural Link
                   </button>
                   <button
                     onClick={() => { setShowMenu(false); onOpenSettings?.(); }}

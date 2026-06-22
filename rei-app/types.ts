@@ -10,6 +10,7 @@ export interface Post {
   likes?: number;
   hasLiked?: boolean;
   comments?: Comment[];
+  postType?: 'user' | 'join_announcement';
 }
 
 export interface Comment {
@@ -80,6 +81,13 @@ export interface Testimonial {
   content: string;
   status: 'pending' | 'approved' | 'denied' | 'archived';
   timestamp: Date;
+}
+
+export interface Connection {
+  id: string;
+  userId: string;
+  connectionId: string;
+  createdAt: Date;
 }
 
 export interface ActivityLog {

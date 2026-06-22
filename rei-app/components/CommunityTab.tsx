@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Post, Comment } from '../types';
-import { Image, Video, Send, Heart, Share2, MoreHorizontal, Clock, X, Camera, ChevronLeft, Check, MessageSquare, Sparkles, Loader2, Wand2, ShieldAlert } from 'lucide-react';
+import { Image, Video, Send, Heart, Share2, MoreHorizontal, Clock, X, Camera, ChevronLeft, Check, MessageSquare, Sparkles, Loader2, Wand2, ShieldAlert, Link2, UserPlus } from 'lucide-react';
 import { format } from 'date-fns';
 import SpiderLily from './SpiderLily';
 
@@ -15,6 +15,9 @@ interface CommunityTabProps {
   onGenerateImage?: (prompt: string) => Promise<string | undefined>;
   onMessageUser?: (userName: string, avatar: string) => void;
   onViewProfile?: (userId: string) => void;
+  currentUserId?: string;
+  connectedIds?: Set<string>;
+  onAddConnection?: (userId: string) => void;
 }
 
 const CommunityTab: React.FC<CommunityTabProps> = ({ 
@@ -27,7 +30,10 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
   onGenerateText,
   onGenerateImage,
   onMessageUser,
-  onViewProfile
+  onViewProfile,
+  currentUserId,
+  connectedIds = new Set(),
+  onAddConnection
 }) => {
   const [content, setContent] = useState('');
   const [mediaPreview, setMediaPreview] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
@@ -133,6 +139,24 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
               </button>
               <p className="text-red-100 text-sm mb-4">{post.content}</p>
               {post.mediaUrl && <img src={post.mediaUrl} className="rounded-2xl w-full mb-4" alt="Media" />}
+
+              {post.postType === 'join_announcement' && post.authorId && (
+                <div className="flex items-center justify-between gap-3 mb-4 p-3 bg-[#0a0101] border border-red-950 rounded-2xl">
+                  <p className="text-red-700 text-xs font-bold italic">Have you met in person?</p>
+                  {post.authorId === currentUserId ? null : connectedIds.has(post.authorId) ? (
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 text-[10px] font-black uppercase rounded-lg border border-red-900/30">
+                      <Link2 size={12} /> Linked
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => onAddConnection?.(post.authorId!)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-[10px] font-black uppercase rounded-lg flex-shrink-0"
+                    >
+                      <UserPlus size={12} /> Add to Neural Link
+                    </button>
+                  )}
+                </div>
+              )}
 
               <button
                 type="button"

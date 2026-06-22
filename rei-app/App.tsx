@@ -11,6 +11,7 @@ import NeuralBreachOverlay from './components/NeuralBreachOverlay';
 import SettingsModal from './components/SettingsModal';
 import NewChatModal from './components/NewChatModal';
 import ProfileView from './components/ProfileView';
+import NeuralLink from './components/NeuralLink';
 import { generateAIResponse } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 
@@ -47,7 +48,7 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isUserOnline, setIsUserOnline] = useState(true);
-  const [view, setView] = useState<'chat' | 'admin' | 'profile'>('chat');
+  const [view, setView] = useState<'chat' | 'admin' | 'profile' | 'neural-link'>('chat');
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Contact[]>(() => {
     const saved = localStorage.getItem('rei_dynamic_contacts');
@@ -56,6 +57,7 @@ const App: React.FC = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
   const [activeContactId, setActiveContactId] = useState<string | 'community'>(contacts[0].id);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -129,6 +131,7 @@ const App: React.FC = () => {
         timestamp: new Date(row.created_at),
         likes: row.likes,
         hasLiked: row.has_liked,
+        postType: row.post_type,
         comments: (row.comments || [])
           .map((c: any) => ({
             id: c.id,
@@ -178,6 +181,25 @@ const App: React.FC = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [view, viewingProfileId]);
+
+  // Load the current user's Neural Link connections and keep them live
+  useEffect(() => {
+    if (!session) { setConnectedIds(new Set()); return; }
+    const loadConnections = async () => {
+      const { data, error } = await supabase
+        .from('connections')
+        .select('connection_id')
+        .eq('user_id', session.user.id);
+      if (error) { console.error(error); return; }
+      setConnectedIds(new Set(data.map((row: any) => row.connection_id)));
+    };
+    loadConnections();
+    const channel = supabase
+      .channel(`connections_${session.user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'connections', filter: `user_id=eq.${session.user.id}` }, loadConnections)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [session]);
 
   useEffect(() => {
     messageAudio.current = new Audio(MESSAGE_SOUND_URL);
@@ -237,6 +259,14 @@ const App: React.FC = () => {
       avatar,
     });
     if (profileError) return profileError.message;
+
+    await supabase.from('posts').insert({
+      author_id: userId,
+      author_name: `${firstName} ${lastName}`.trim(),
+      author_avatar: avatar || DEFAULT_AVATAR,
+      content: `${firstName} just linked into the Neural Network. Say hi!`,
+      post_type: 'join_announcement',
+    });
 
     if (!data.session) return 'Check your email to confirm your account, then sign in.';
   };
@@ -355,6 +385,24 @@ const App: React.FC = () => {
     if (error) console.error(error);
   };
 
+  const handleAddConnection = async (connectionId: string) => {
+    if (!session) return;
+    const { error } = await supabase
+      .from('connections')
+      .upsert({ user_id: session.user.id, connection_id: connectionId }, { onConflict: 'user_id,connection_id', ignoreDuplicates: true });
+    if (error) console.error(error);
+  };
+
+  const handleRemoveConnection = async (connectionId: string) => {
+    if (!session) return;
+    const { error } = await supabase
+      .from('connections')
+      .delete()
+      .eq('user_id', session.user.id)
+      .eq('connection_id', connectionId);
+    if (error) console.error(error);
+  };
+
   if (authStatus === 'unauthenticated') {
     return (
       <AuthScreen
@@ -428,6 +476,7 @@ const App: React.FC = () => {
           onOpenSettings={() => setShowSettings(true)}
           onOpenNewChat={() => setIsNewChatModalOpen(true)}
           onOpenProfile={() => myProfile && handleViewProfile(myProfile.id)}
+          onOpenNeuralLink={() => { setView('neural-link'); if (isMobileView) setShowSidebar(false); }}
           onViewProfile={handleViewProfile}
           onLogout={async () => {
             await supabase.auth.signOut();
@@ -443,6 +492,13 @@ const App: React.FC = () => {
             users={users}
             onKick={handleKick}
             onViewProfile={handleViewProfile}
+            onBack={isMobileView ? () => setShowSidebar(true) : undefined}
+          />
+        ) : view === 'neural-link' ? (
+          <NeuralLink
+            connections={users.filter(u => connectedIds.has(u.id))}
+            onViewProfile={handleViewProfile}
+            onRemoveConnection={handleRemoveConnection}
             onBack={isMobileView ? () => setShowSidebar(true) : undefined}
           />
         ) : view === 'profile' ? (
@@ -473,6 +529,9 @@ const App: React.FC = () => {
             currentUser={{ name: currentUsername, avatar: currentAvatar }}
             onBack={isMobileView ? () => setShowSidebar(true) : undefined}
             onViewProfile={handleViewProfile}
+            currentUserId={session?.user.id}
+            connectedIds={connectedIds}
+            onAddConnection={handleAddConnection}
           />
         ) : (
           activeContact && (
