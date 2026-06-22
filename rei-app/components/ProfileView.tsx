@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { UserProfile, Post, Testimonial } from '../types';
-import { ChevronLeft, Camera, Pencil, Save, Check, X, Loader2, Lock, Eye, EyeOff, Quote, Archive } from 'lucide-react';
+import { ChevronLeft, Camera, Pencil, Save, Check, X, Loader2, Lock, Eye, EyeOff, Quote, Archive, Link2, UserPlus } from 'lucide-react';
 import { format } from 'date-fns';
 import SpiderLily from './SpiderLily';
 
@@ -18,6 +18,8 @@ interface ProfileViewProps {
   canSubmitTestimonial?: boolean;
   onAddTestimonial?: (content: string) => void | Promise<void>;
   onSetTestimonialStatus?: (id: string, status: Testimonial['status']) => void | Promise<void>;
+  isConnected?: boolean;
+  onAddConnection?: () => void;
 }
 
 const displayName = (profile: UserProfile) => profile.nickname?.trim() || profile.username;
@@ -44,6 +46,7 @@ const resizeImage = (file: File): Promise<string> => new Promise((resolve) => {
 const ProfileView: React.FC<ProfileViewProps> = ({
   profile, posts, isOwnProfile, onBack, onSave,
   testimonials = [], canSubmitTestimonial, onAddTestimonial, onSetTestimonialStatus,
+  isConnected, onAddConnection,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [firstName, setFirstName] = useState(profile.firstName);
@@ -117,6 +120,20 @@ const ProfileView: React.FC<ProfileViewProps> = ({
           >
             <Pencil size={14} /> Edit Profile
           </button>
+        )}
+        {!isOwnProfile && (
+          isConnected ? (
+            <span className="flex items-center gap-2 px-4 py-2 text-red-600 border border-red-900/30 rounded-xl text-xs font-black uppercase tracking-widest">
+              <Link2 size={14} /> Linked
+            </span>
+          ) : onAddConnection && (
+            <button
+              onClick={onAddConnection}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest"
+            >
+              <UserPlus size={14} /> Add to Neural Link
+            </button>
+          )
         )}
       </div>
 

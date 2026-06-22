@@ -845,6 +845,8 @@ const App: React.FC = () => {
                 canSubmitTestimonial={!isOwnProfile && !!session}
                 onAddTestimonial={(content) => handleAddTestimonial(profile.id, content)}
                 onSetTestimonialStatus={isOwnProfile ? handleSetTestimonialStatus : undefined}
+                isConnected={connectedIds.has(profile.id)}
+                onAddConnection={!isOwnProfile && session ? () => handleAddConnection(profile.id) : undefined}
               />
             );
           })()
