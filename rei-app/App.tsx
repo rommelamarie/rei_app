@@ -58,6 +58,7 @@ const App: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
+  const [directMessages, setDirectMessages] = useState<Message[]>([]);
   const [activeContactId, setActiveContactId] = useState<string | 'community' | 'hub'>(contacts[0].id);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -200,6 +201,77 @@ const App: React.FC = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [session]);
+
+  // Load my direct messages and keep them live; play a sound and ensure a
+  // contact entry exists whenever a new message arrives for me.
+  useEffect(() => {
+    if (!session) { setDirectMessages([]); return; }
+    const myId = session.user.id;
+
+    const mapMessageRow = (row: any): Message => ({
+      id: row.id,
+      text: row.content,
+      sender: row.sender_id === myId ? 'user' : 'bot',
+      timestamp: new Date(row.created_at),
+      status: 'delivered',
+      senderId: row.sender_id,
+      recipientId: row.recipient_id,
+    });
+
+    const loadMessages = async () => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`sender_id.eq.${myId},recipient_id.eq.${myId}`)
+        .order('created_at', { ascending: true });
+      if (error) { console.error(error); return; }
+      setDirectMessages(data.map(mapMessageRow));
+    };
+    loadMessages();
+
+    const channel = supabase
+      .channel(`messages_${myId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload: any) => {
+        const row = payload.new;
+        if (row.sender_id !== myId && row.recipient_id !== myId) return;
+        setDirectMessages(prev => [...prev, mapMessageRow(row)]);
+
+        if (row.recipient_id === myId && row.sender_id !== myId) {
+          if (messageAudio.current) {
+            messageAudio.current.currentTime = 0;
+            messageAudio.current.play().catch(() => {});
+          }
+          setContacts(prev => {
+            const exists = prev.some(c => c.profileId === row.sender_id);
+            if (exists) {
+              return prev.map(c => c.profileId === row.sender_id
+                ? { ...c, lastMessage: row.content, lastSeen: 'Just now' }
+                : c);
+            }
+            const senderProfile = users.find(u => u.id === row.sender_id);
+            if (!senderProfile) return prev;
+            const newContact: Contact = {
+              id: `user-${row.sender_id}`,
+              profileId: row.sender_id,
+              name: displayName(senderProfile),
+              avatar: senderProfile.avatar || DEFAULT_AVATAR,
+              isOnline: true,
+              type: 'human',
+              category: 'direct',
+              lastMessage: row.content,
+              lastSeen: 'Just now',
+            };
+            return [newContact, ...prev];
+          });
+        } else if (row.sender_id === myId) {
+          setContacts(prev => prev.map(c => c.profileId === row.recipient_id
+            ? { ...c, lastMessage: row.content, lastSeen: 'Just now' }
+            : c));
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [session, users]);
 
   useEffect(() => {
     messageAudio.current = new Audio(MESSAGE_SOUND_URL);
@@ -393,6 +465,16 @@ const App: React.FC = () => {
     if (error) console.error(error);
   };
 
+  const handleSendDirectMessage = async (recipientId: string, content: string) => {
+    if (!session) return;
+    const { error } = await supabase.from('messages').insert({
+      sender_id: session.user.id,
+      recipient_id: recipientId,
+      content,
+    });
+    if (error) console.error(error);
+  };
+
   const handleRemoveConnection = async (connectionId: string) => {
     if (!session) return;
     const { error } = await supabase
@@ -413,7 +495,9 @@ const App: React.FC = () => {
   }
 
   const activeContact = contacts.find(c => c.id === activeContactId);
-  const activeMessages = sessions[activeContactId as string] || [];
+  const activeMessages = activeContact?.profileId
+    ? directMessages.filter(m => m.senderId === activeContact.profileId || m.recipientId === activeContact.profileId)
+    : sessions[activeContactId as string] || [];
   const currentUsername = displayName(myProfile);
   const currentAvatar = myProfile?.avatar || DEFAULT_AVATAR;
 
@@ -557,6 +641,10 @@ const App: React.FC = () => {
               messages={activeMessages}
               onSendMessage={async (text) => {
                 const contactId = activeContactId as string;
+                if (activeContact.profileId) {
+                  await handleSendDirectMessage(activeContact.profileId, text);
+                  return;
+                }
                 addMessage(contactId, {
                   id: Date.now().toString(), text,
                   sender: 'user', timestamp: new Date(), status: 'sent'

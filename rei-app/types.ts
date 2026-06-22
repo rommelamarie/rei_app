@@ -33,6 +33,8 @@ export interface Message {
   imageUrl?: string;
   audioUrl?: string;
   sources?: Array<{ title: string; uri: string }>;
+  senderId?: string;
+  recipientId?: string;
 }
 
 export interface Contact {
