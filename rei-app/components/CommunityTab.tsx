@@ -68,6 +68,22 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
     setMediaPreview(null);
   };
 
+  const toggleComments = (postId: string) => {
+    setExpandedComments(prev => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId); else next.add(postId);
+      return next;
+    });
+  };
+
+  const handleCommentSubmit = (e: React.FormEvent, postId: string) => {
+    e.preventDefault();
+    const text = (commentInputs[postId] || '').trim();
+    if (!text) return;
+    onCommentPost(postId, text);
+    setCommentInputs(prev => ({ ...prev, [postId]: '' }));
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#0a0101] relative overflow-hidden">
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.02]">
@@ -117,6 +133,50 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
               </button>
               <p className="text-red-100 text-sm mb-4">{post.content}</p>
               {post.mediaUrl && <img src={post.mediaUrl} className="rounded-2xl w-full mb-4" alt="Media" />}
+
+              <button
+                type="button"
+                onClick={() => toggleComments(post.id)}
+                className="flex items-center gap-1.5 text-red-700 hover:text-red-500 text-[10px] font-black uppercase tracking-widest pt-1"
+              >
+                <MessageSquare size={14} />
+                {(post.comments?.length || 0) > 0 ? `${post.comments!.length} Comment${post.comments!.length === 1 ? '' : 's'}` : 'Comment'}
+              </button>
+
+              {expandedComments.has(post.id) && (
+                <div className="mt-4 pt-4 border-t border-red-950/50 space-y-4">
+                  {post.comments?.map((comment) => (
+                    <div key={comment.id} className="flex items-start space-x-3">
+                      <img src={comment.authorAvatar} className="w-7 h-7 rounded-full flex-shrink-0" alt={comment.authorName} />
+                      <div className="flex-1 min-w-0 bg-[#0a0101] border border-red-950/50 rounded-2xl px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <h5 className="font-bold text-red-50 text-xs truncate">{comment.authorName}</h5>
+                          <span className="text-[8px] text-red-900 font-black uppercase tracking-widest flex-shrink-0">{format(comment.timestamp, 'HH:mm')}</span>
+                        </div>
+                        <p className="text-red-200 text-xs mt-0.5 whitespace-pre-wrap">{comment.content}</p>
+                      </div>
+                    </div>
+                  ))}
+
+                  <form onSubmit={(e) => handleCommentSubmit(e, post.id)} className="flex items-center space-x-3">
+                    <img src={currentUser.avatar} className="w-7 h-7 rounded-full flex-shrink-0" alt="Me" />
+                    <input
+                      type="text"
+                      value={commentInputs[post.id] || ''}
+                      onChange={(e) => setCommentInputs(prev => ({ ...prev, [post.id]: e.target.value }))}
+                      placeholder="Add a comment..."
+                      className="flex-1 bg-[#0a0101] border border-red-950 rounded-full py-2 px-4 text-red-50 placeholder-red-950 outline-none focus:ring-1 focus:ring-red-600 text-xs"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!(commentInputs[post.id] || '').trim()}
+                      className="p-2 bg-red-600 text-white rounded-full disabled:opacity-30 flex-shrink-0"
+                    >
+                      <Send size={14} fill="currentColor" />
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
           ))}
         </div>
