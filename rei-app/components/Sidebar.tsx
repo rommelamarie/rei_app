@@ -49,13 +49,20 @@ const Sidebar: React.FC<SidebarProps> = ({
   }, []);
 
   const handleInstallClick = () => {
-    if (deferredPrompt) {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || (window.navigator as any).standalone === true;
+
+    if (isStandalone) {
+      alert('Standalone Client is already installed on this device.');
+    } else if (deferredPrompt) {
       deferredPrompt.prompt();
       deferredPrompt.userChoice.then((choiceResult: any) => {
         if (choiceResult.outcome === 'accepted') setDeferredPrompt(null);
       });
+    } else if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+      alert('To install: tap the Share icon in Safari, then "Add to Home Screen".');
     } else {
-      alert("App is already synced or standalone link is required.");
+      alert('To install: open your browser menu and look for "Add to Home Screen" or "Install App".');
     }
     setShowMenu(false);
   };

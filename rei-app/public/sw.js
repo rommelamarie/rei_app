@@ -1,9 +1,11 @@
 
-const CACHE_NAME = 'rei-crimson-v3';
+const CACHE_NAME = 'rei-crimson-v4';
 const ASSETS = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
 // Install Event
