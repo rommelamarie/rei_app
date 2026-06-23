@@ -29,27 +29,37 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const [duration, setDuration] = React.useState(0);
+  const [debugInfo, setDebugInfo] = React.useState('');
 
   // status is included here because the <video>/<audio> elements are only
   // mounted into the DOM once status === 'active'. Without it, this effect
   // can run (and attach the stream) before that element exists, and won't
   // re-fire once it actually mounts since the stream itself hasn't changed.
   useEffect(() => {
+    const lines: string[] = [];
+    lines.push(`local stream: ${localStream ? `${localStream.getTracks().length} tracks (${localStream.getTracks().map(t => `${t.kind}:${t.readyState}:${t.enabled}`).join(', ')})` : 'null'}`);
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch(() => {});
+      localVideoRef.current.play()
+        .then(() => lines.push('local video: play() OK'))
+        .catch((e) => lines.push(`local video: play() FAILED: ${e?.name}: ${e?.message}`))
+        .finally(() => setDebugInfo(lines.join('\n')));
+    } else {
+      lines.push('local video element: not mounted');
+      setDebugInfo(lines.join('\n'));
     }
   }, [localStream, status]);
 
   useEffect(() => {
     if (type === 'video' && remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch(() => {});
+      remoteVideoRef.current.play().catch((e) => console.error('remote video play failed', e));
     }
     if (type === 'audio' && remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = remoteStream;
-      remoteAudioRef.current.play().catch(() => {});
+      remoteAudioRef.current.play().catch((e) => console.error('remote audio play failed', e));
     }
+    setDebugInfo(prev => `${prev}\nremote stream: ${remoteStream ? `${remoteStream.getTracks().length} tracks (${remoteStream.getTracks().map(t => `${t.kind}:${t.readyState}:${t.enabled}`).join(', ')})` : 'null'}`);
   }, [remoteStream, type, status]);
 
   useEffect(() => {
@@ -68,6 +78,9 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
 
       {type === 'video' && status === 'active' && (
         <video ref={remoteVideoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
+      )}
+      {status === 'active' && debugInfo && (
+        <pre className="absolute top-6 left-2 right-2 z-20 text-[9px] text-lime-400 bg-black/70 p-2 rounded-lg whitespace-pre-wrap max-h-40 overflow-y-auto">{debugInfo}</pre>
       )}
       {type === 'video' && status === 'active' && (
         <video
