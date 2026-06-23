@@ -82,6 +82,7 @@ const App: React.FC = () => {
   // Calling (WebRTC, signaled over Supabase Realtime broadcast)
   const [callState, setCallState] = useState<CallState | null>(null);
   const [callListenerStatus, setCallListenerStatus] = useState('init');
+  const [outgoingCallDebug, setOutgoingCallDebug] = useState('');
   const [incomingOffer, setIncomingOffer] = useState<{ callId: string; callerId: string; callerName: string; callerAvatar: string; type: CallType; sdp: RTCSessionDescriptionInit } | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -451,12 +452,15 @@ const App: React.FC = () => {
   }, [localStream]);
 
   const sendOnce = (channelName: string, event: string, payload: any) => {
+    setOutgoingCallDebug(`targeting ${channelName} (${event}): subscribing...`);
     const channel = supabase.channel(channelName);
     channel.subscribe((status) => {
       console.log(`[call] sendOnce(${channelName}, ${event}) status:`, status);
+      setOutgoingCallDebug(`targeting ${channelName} (${event}): subscribe=${status}`);
       if (status === 'SUBSCRIBED') {
         channel.send({ type: 'broadcast', event, payload }).then((res) => {
           console.log(`[call] sendOnce(${channelName}, ${event}) send result:`, res);
+          setOutgoingCallDebug(`targeting ${channelName} (${event}): subscribe=SUBSCRIBED, send=${res}`);
         });
         setTimeout(() => supabase.removeChannel(channel), 3000);
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -875,6 +879,11 @@ const App: React.FC = () => {
       {session && !callState && (
         <div className="fixed bottom-1 left-1 z-[150] text-[8px] font-mono px-1.5 py-0.5 rounded bg-black/60 text-lime-400 pointer-events-none">
           call-listener: {callListenerStatus}
+        </div>
+      )}
+      {callState?.status === 'calling' && outgoingCallDebug && (
+        <div className="fixed top-1 left-1 right-1 z-[250] text-[8px] font-mono px-1.5 py-1 rounded bg-black/70 text-lime-400 break-all">
+          {outgoingCallDebug}
         </div>
       )}
 
