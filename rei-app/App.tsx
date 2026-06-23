@@ -326,6 +326,44 @@ const App: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [session, users]);
 
+  // Self-heal the contact list from real message history. Contacts only
+  // live in localStorage, so a conversation partner can otherwise vanish
+  // after clearing storage, switching browsers/devices, etc. even though
+  // the actual messages are safely persisted in Supabase.
+  useEffect(() => {
+    if (!session || directMessages.length === 0 || users.length === 0) return;
+    const myId = session.user.id;
+    const lastMessageByPartner = new Map<string, Message>();
+    directMessages.forEach(m => {
+      const partnerId = m.senderId === myId ? m.recipientId : m.senderId;
+      if (!partnerId || partnerId === myId) return;
+      const existing = lastMessageByPartner.get(partnerId);
+      if (!existing || m.timestamp > existing.timestamp) lastMessageByPartner.set(partnerId, m);
+    });
+
+    setContacts(prev => {
+      const existingProfileIds = new Set(prev.map(c => c.profileId).filter(Boolean));
+      const missingIds = Array.from(lastMessageByPartner.keys()).filter(id => !existingProfileIds.has(id));
+      if (missingIds.length === 0) return prev;
+      const restored: Contact[] = missingIds.map(id => {
+        const profile = users.find(u => u.id === id);
+        const lastMsg = lastMessageByPartner.get(id);
+        return {
+          id: `user-${id}`,
+          profileId: id,
+          name: profile ? displayName(profile) : 'Unknown',
+          avatar: profile?.avatar || DEFAULT_AVATAR,
+          isOnline: true,
+          type: 'human',
+          category: 'direct',
+          lastMessage: lastMsg?.text,
+          lastSeen: 'Online',
+        };
+      });
+      return [...restored, ...prev];
+    });
+  }, [directMessages, users, session]);
+
   // Listen globally for incoming calls, regardless of which chat is open
   useEffect(() => {
     if (!session) return;
