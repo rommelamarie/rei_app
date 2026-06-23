@@ -30,14 +30,18 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const [duration, setDuration] = React.useState(0);
 
+  // status is included here because the <video>/<audio> elements are only
+  // mounted into the DOM once status === 'active'. Without it, this effect
+  // can run (and attach the stream) before that element exists, and won't
+  // re-fire once it actually mounts since the stream itself hasn't changed.
   useEffect(() => {
     if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
-  }, [localStream]);
+  }, [localStream, status]);
 
   useEffect(() => {
     if (type === 'video' && remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
     if (type === 'audio' && remoteAudioRef.current) remoteAudioRef.current.srcObject = remoteStream;
-  }, [remoteStream, type]);
+  }, [remoteStream, type, status]);
 
   useEffect(() => {
     if (status !== 'active') { setDuration(0); return; }
