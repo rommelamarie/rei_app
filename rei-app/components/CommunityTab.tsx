@@ -151,15 +151,17 @@ const CommunityTab: React.FC<CommunityTabProps> = ({
               <p className="text-red-100 text-sm mb-4">{post.content}</p>
               {post.mediaUrl && <img src={post.mediaUrl} className="rounded-2xl w-full mb-4" alt="Media" />}
 
-              {post.postType === 'join_announcement' && post.authorId && (
+              {post.authorId && post.authorId !== currentUserId && (
                 <div className="flex items-center justify-between gap-3 mb-4 p-3 bg-[#0a0101] border border-red-950 rounded-2xl">
-                  <p className="text-red-700 text-xs font-bold italic">Have you met in person?</p>
-                  {post.authorId === currentUserId ? null : connectedIds.has(post.authorId) ? (
-                    <span className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 text-[10px] font-black uppercase rounded-lg border border-red-900/30">
+                  <p className="text-red-700 text-xs font-bold italic">
+                    {post.postType === 'join_announcement' ? 'Have you met in person?' : 'Not in your Neural Link yet'}
+                  </p>
+                  {connectedIds.has(post.authorId) ? (
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 text-[10px] font-black uppercase rounded-lg border border-red-900/30 flex-shrink-0">
                       <Link2 size={12} /> Linked
                     </span>
                   ) : pendingRequestIds.has(post.authorId) ? (
-                    <span className="flex items-center gap-1.5 px-3 py-1.5 text-red-800 text-[10px] font-black uppercase rounded-lg border border-red-900/30">
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 text-red-800 text-[10px] font-black uppercase rounded-lg border border-red-900/30 flex-shrink-0">
                       Request Sent
                     </span>
                   ) : (
