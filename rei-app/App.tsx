@@ -770,7 +770,10 @@ const App: React.FC = () => {
     const { error } = await supabase
       .from('connection_requests')
       .upsert({ sender_id: session.user.id, recipient_id: recipientId, status: 'pending' }, { onConflict: 'sender_id,recipient_id' });
-    if (error) console.error(error);
+    if (error) {
+      console.error('[neural-link] failed to send request:', error);
+      alert(`Failed to send Neural Link request: ${error.message}`);
+    }
   };
 
   const handleAcceptConnectionRequest = async (requestId: string, otherId: string) => {
