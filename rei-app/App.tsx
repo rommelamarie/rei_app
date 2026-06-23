@@ -105,7 +105,11 @@ const App: React.FC = () => {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // Load my own profile whenever the session changes
+  // Load my own profile whenever the session changes. If a signed-in user
+  // has no profile row (e.g. an admin "Kick" deletes the profile but not
+  // the login itself, leaving a valid session with nothing to back it),
+  // self-heal a minimal one instead of leaving every profile-dependent
+  // action (Neural Link, testimonials, posts) silently/confusingly broken.
   useEffect(() => {
     if (!session) { setMyProfile(null); return; }
     const loadMyProfile = async () => {
@@ -113,9 +117,17 @@ const App: React.FC = () => {
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
-        .single();
+        .maybeSingle();
       if (error) { console.error(error); return; }
-      if (data) setMyProfile(mapProfileRow(data));
+      if (data) { setMyProfile(mapProfileRow(data)); return; }
+
+      const { data: created, error: createError } = await supabase
+        .from('profiles')
+        .insert({ id: session.user.id, first_name: 'Unnamed', last_name: 'Subject', email: session.user.email })
+        .select('*')
+        .single();
+      if (createError) { console.error('[profile] self-heal failed:', createError); return; }
+      setMyProfile(mapProfileRow(created));
     };
     loadMyProfile();
   }, [session]);
