@@ -377,30 +377,23 @@ const App: React.FC = () => {
       });
       const merged = [...restored, ...prev];
 
-      // Drop stale duplicates: a human contact's cached name (snapshotted
-      // at creation time) can outlive the actual account it points to —
-      // e.g. an early orphaned test signup that later got a placeholder
-      // "Unnamed Subject" profile via self-heal. If a contact's profileId
-      // currently resolves to that generic placeholder while another
-      // contact with the SAME cached name resolves to a real, different
-      // live profile, the placeholder one is the stale leftover pointer.
-      // Calling/messaging through it silently targets the wrong account.
-      const namesWithRealProfile = new Set(
-        merged
-          .filter(c => c.type === 'human' && c.profileId)
-          .map(c => ({ c, profile: users.find(u => u.id === c.profileId) }))
-          .filter(({ profile }) => profile && displayName(profile) !== 'Unnamed Subject')
-          .map(({ c }) => c.name.toLowerCase())
-      );
-      const deduped = merged.filter(c => {
-        if (c.type !== 'human' || !c.profileId) return true;
-        const profile = users.find(u => u.id === c.profileId);
-        if (!profile || displayName(profile) !== 'Unnamed Subject') return true;
-        return !namesWithRealProfile.has(c.name.toLowerCase());
+      // One-time targeted fix: an early test signup (before the real
+      // "New Person" test account existed) got captured into a contact
+      // entry that's lived in localStorage ever since, and was never
+      // corrected because no direct message was ever exchanged for the
+      // self-heal-from-message-history logic above to fix it. That
+      // orphaned account later got a placeholder profile via self-heal.
+      // Remap that one known-bad pointer directly to the real account.
+      const ORPHANED_TEST_ID = 'bf446ca8-d707-4702-8bc5-11d2ed97d115';
+      const REAL_NEW_PERSON_ID = '081f6181-dc76-4f92-b28f-5c0c0106f1c0';
+      const realProfile = users.find(u => u.id === REAL_NEW_PERSON_ID);
+      const remapped = merged.map(c => {
+        if (c.profileId !== ORPHANED_TEST_ID || !realProfile) return c;
+        return { ...c, profileId: REAL_NEW_PERSON_ID, name: displayName(realProfile), avatar: realProfile.avatar || DEFAULT_AVATAR };
       });
 
-      if (deduped.length === merged.length && missingIds.length === 0) return prev;
-      return deduped;
+      if (remapped.length === merged.length && remapped.every((c, i) => c === merged[i]) && missingIds.length === 0) return prev;
+      return remapped;
     });
   }, [directMessages, users, session]);
 
