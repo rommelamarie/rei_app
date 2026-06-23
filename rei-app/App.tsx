@@ -347,7 +347,7 @@ const App: React.FC = () => {
   // after clearing storage, switching browsers/devices, etc. even though
   // the actual messages are safely persisted in Supabase.
   useEffect(() => {
-    if (!session || directMessages.length === 0 || users.length === 0) return;
+    if (!session || users.length === 0) return;
     const myId = session.user.id;
     const lastMessageByPartner = new Map<string, Message>();
     directMessages.forEach(m => {
@@ -377,19 +377,26 @@ const App: React.FC = () => {
       });
       const merged = [...restored, ...prev];
 
-      // Drop stale duplicates: a human contact sharing a name with another
-      // contact, but with zero real message history under its profileId,
-      // is almost always a leftover pointer to an old/orphaned account
-      // (e.g. from early test signups) rather than a real distinct person.
+      // Drop stale duplicates: a human contact's cached name (snapshotted
+      // at creation time) can outlive the actual account it points to —
+      // e.g. an early orphaned test signup that later got a placeholder
+      // "Unnamed Subject" profile via self-heal. If a contact's profileId
+      // currently resolves to that generic placeholder while another
+      // contact with the SAME cached name resolves to a real, different
+      // live profile, the placeholder one is the stale leftover pointer.
       // Calling/messaging through it silently targets the wrong account.
-      const namesWithHistory = new Set(
-        merged.filter(c => c.type === 'human' && c.profileId && lastMessageByPartner.has(c.profileId))
-          .map(c => c.name.toLowerCase())
+      const namesWithRealProfile = new Set(
+        merged
+          .filter(c => c.type === 'human' && c.profileId)
+          .map(c => ({ c, profile: users.find(u => u.id === c.profileId) }))
+          .filter(({ profile }) => profile && displayName(profile) !== 'Unnamed Subject')
+          .map(({ c }) => c.name.toLowerCase())
       );
       const deduped = merged.filter(c => {
         if (c.type !== 'human' || !c.profileId) return true;
-        if (lastMessageByPartner.has(c.profileId)) return true;
-        return !namesWithHistory.has(c.name.toLowerCase());
+        const profile = users.find(u => u.id === c.profileId);
+        if (!profile || displayName(profile) !== 'Unnamed Subject') return true;
+        return !namesWithRealProfile.has(c.name.toLowerCase());
       });
 
       if (deduped.length === merged.length && missingIds.length === 0) return prev;
