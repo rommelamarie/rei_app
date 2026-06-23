@@ -759,7 +759,10 @@ const App: React.FC = () => {
         { user_id: myId, connection_id: otherId },
         { user_id: otherId, connection_id: myId },
       ], { onConflict: 'user_id,connection_id', ignoreDuplicates: true });
-    if (error) console.error(error);
+    if (error) {
+      console.error('[neural-link] failed to create connection:', error);
+      alert(`Failed to link: ${error.message}`);
+    }
   };
 
   const handleSendConnectionRequest = async (recipientId: string) => {
