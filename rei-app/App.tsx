@@ -81,6 +81,7 @@ const App: React.FC = () => {
 
   // Calling (WebRTC, signaled over Supabase Realtime broadcast)
   const [callState, setCallState] = useState<CallState | null>(null);
+  const [callListenerStatus, setCallListenerStatus] = useState('init');
   const [incomingOffer, setIncomingOffer] = useState<{ callId: string; callerId: string; callerName: string; callerAvatar: string; type: CallType; sdp: RTCSessionDescriptionInit } | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -385,6 +386,12 @@ const App: React.FC = () => {
   // incoming call-offer broadcast could be missed entirely, since
   // broadcasts aren't queued for anyone not subscribed at that instant.
   const myUserId = session?.user.id;
+  const [visibilityTick, setVisibilityTick] = useState(0);
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') setVisibilityTick(t => t + 1); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
   useEffect(() => {
     if (!myUserId) return;
     const channel = supabase
@@ -408,9 +415,10 @@ const App: React.FC = () => {
       })
       .subscribe((status) => {
         console.log('[call] global listener status:', status, `user-calls-${myUserId}`);
+        setCallListenerStatus(status);
       });
     return () => { supabase.removeChannel(channel); };
-  }, [myUserId]);
+  }, [myUserId, visibilityTick]);
 
   // Single source of truth for the ring/ring-back tone: play while calling
   // (caller) or ringing (callee), stop the moment that's no longer true.
@@ -862,6 +870,12 @@ const App: React.FC = () => {
     <div className="flex h-[100dvh] w-full bg-[#050000] text-red-50 overflow-hidden relative">
       {showNeuralOverlay && (
         <NeuralBreachOverlay onComplete={() => setShowNeuralOverlay(false)} />
+      )}
+
+      {session && !callState && (
+        <div className="fixed bottom-1 left-1 z-[150] text-[8px] font-mono px-1.5 py-0.5 rounded bg-black/60 text-lime-400 pointer-events-none">
+          call-listener: {callListenerStatus}
+        </div>
       )}
 
       {callState && (
