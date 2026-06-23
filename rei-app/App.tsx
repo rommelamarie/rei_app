@@ -360,7 +360,6 @@ const App: React.FC = () => {
     setContacts(prev => {
       const existingProfileIds = new Set(prev.map(c => c.profileId).filter(Boolean));
       const missingIds = Array.from(lastMessageByPartner.keys()).filter(id => !existingProfileIds.has(id));
-      if (missingIds.length === 0) return prev;
       const restored: Contact[] = missingIds.map(id => {
         const profile = users.find(u => u.id === id);
         const lastMsg = lastMessageByPartner.get(id);
@@ -376,7 +375,25 @@ const App: React.FC = () => {
           lastSeen: 'Online',
         };
       });
-      return [...restored, ...prev];
+      const merged = [...restored, ...prev];
+
+      // Drop stale duplicates: a human contact sharing a name with another
+      // contact, but with zero real message history under its profileId,
+      // is almost always a leftover pointer to an old/orphaned account
+      // (e.g. from early test signups) rather than a real distinct person.
+      // Calling/messaging through it silently targets the wrong account.
+      const namesWithHistory = new Set(
+        merged.filter(c => c.type === 'human' && c.profileId && lastMessageByPartner.has(c.profileId))
+          .map(c => c.name.toLowerCase())
+      );
+      const deduped = merged.filter(c => {
+        if (c.type !== 'human' || !c.profileId) return true;
+        if (lastMessageByPartner.has(c.profileId)) return true;
+        return !namesWithHistory.has(c.name.toLowerCase());
+      });
+
+      if (deduped.length === merged.length && missingIds.length === 0) return prev;
+      return deduped;
     });
   }, [directMessages, users, session]);
 
@@ -451,20 +468,24 @@ const App: React.FC = () => {
     setCallState(null);
   }, [localStream]);
 
-  const sendOnce = (channelName: string, event: string, payload: any) => {
-    setOutgoingCallDebug(`targeting ${channelName} (${event}): subscribing...`);
+  const sendOnce = (channelName: string, event: string, payload: any, attempt = 1) => {
+    setOutgoingCallDebug(`targeting ${channelName} (${event}) attempt ${attempt}: subscribing...`);
     const channel = supabase.channel(channelName);
     channel.subscribe((status) => {
-      console.log(`[call] sendOnce(${channelName}, ${event}) status:`, status);
-      setOutgoingCallDebug(`targeting ${channelName} (${event}): subscribe=${status}`);
+      console.log(`[call] sendOnce(${channelName}, ${event}) attempt ${attempt} status:`, status);
+      setOutgoingCallDebug(`targeting ${channelName} (${event}) attempt ${attempt}: subscribe=${status}`);
       if (status === 'SUBSCRIBED') {
         channel.send({ type: 'broadcast', event, payload }).then((res) => {
           console.log(`[call] sendOnce(${channelName}, ${event}) send result:`, res);
-          setOutgoingCallDebug(`targeting ${channelName} (${event}): subscribe=SUBSCRIBED, send=${res}`);
+          setOutgoingCallDebug(`targeting ${channelName} (${event}) attempt ${attempt}: subscribe=SUBSCRIBED, send=${res}`);
         });
         setTimeout(() => supabase.removeChannel(channel), 3000);
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        console.error(`[call] sendOnce(${channelName}, ${event}) failed to subscribe:`, status);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.error(`[call] sendOnce(${channelName}, ${event}) attempt ${attempt} failed to subscribe:`, status);
+        supabase.removeChannel(channel);
+        if (attempt < 3) {
+          setTimeout(() => sendOnce(channelName, event, payload, attempt + 1), 500);
+        }
       }
     });
   };
