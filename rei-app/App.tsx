@@ -471,20 +471,27 @@ const App: React.FC = () => {
   const sendOnce = (channelName: string, event: string, payload: any, attempt = 1) => {
     setOutgoingCallDebug(`targeting ${channelName} (${event}) attempt ${attempt}: subscribing...`);
     const channel = supabase.channel(channelName);
+    let settled = false;
     channel.subscribe((status) => {
       console.log(`[call] sendOnce(${channelName}, ${event}) attempt ${attempt} status:`, status);
       setOutgoingCallDebug(`targeting ${channelName} (${event}) attempt ${attempt}: subscribe=${status}`);
       if (status === 'SUBSCRIBED') {
+        settled = true;
         channel.send({ type: 'broadcast', event, payload }).then((res) => {
           console.log(`[call] sendOnce(${channelName}, ${event}) send result:`, res);
           setOutgoingCallDebug(`targeting ${channelName} (${event}) attempt ${attempt}: subscribe=SUBSCRIBED, send=${res}`);
         });
-        setTimeout(() => supabase.removeChannel(channel), 3000);
+        setTimeout(() => supabase.removeChannel(channel), 5000);
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        if (settled) return;
+        settled = true;
         console.error(`[call] sendOnce(${channelName}, ${event}) attempt ${attempt} failed to subscribe:`, status);
         supabase.removeChannel(channel);
-        if (attempt < 3) {
-          setTimeout(() => sendOnce(channelName, event, payload, attempt + 1), 500);
+        if (attempt < 6) {
+          setTimeout(() => sendOnce(channelName, event, payload, attempt + 1), 700);
+        } else {
+          setOutgoingCallDebug(`targeting ${channelName} (${event}): FAILED after ${attempt} attempts`);
+          alert(`Could not reach the other person (connection kept dropping). Please try again.`);
         }
       }
     });
