@@ -658,7 +658,7 @@ const App: React.FC = () => {
 
   const handleAddPost = async (content: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
     const { error } = await supabase.from('posts').insert({
-      author_id: myProfile?.id,
+      author_id: session?.user.id,
       author_name: displayName(myProfile),
       author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
       content,
@@ -682,7 +682,7 @@ const App: React.FC = () => {
   const handleCommentPost = async (postId: string, content: string) => {
     const { error } = await supabase.from('comments').insert({
       post_id: postId,
-      author_id: myProfile?.id,
+      author_id: session?.user.id,
       author_name: displayName(myProfile),
       author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
       content,
@@ -737,7 +737,7 @@ const App: React.FC = () => {
   const handleAddTestimonial = async (profileId: string, content: string) => {
     const { error } = await supabase.from('testimonials').insert({
       profile_id: profileId,
-      author_id: myProfile?.id,
+      author_id: session?.user.id,
       author_name: displayName(myProfile),
       author_avatar: myProfile?.avatar || DEFAULT_AVATAR,
       content,
