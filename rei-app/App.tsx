@@ -90,6 +90,8 @@ const App: React.FC = () => {
   const callChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callStateRef = useRef<CallState | null>(null);
+  useEffect(() => { callStateRef.current = callState; }, [callState]);
 
   // Persist contacts
   useEffect(() => {
@@ -376,15 +378,20 @@ const App: React.FC = () => {
     });
   }, [directMessages, users, session]);
 
-  // Listen globally for incoming calls, regardless of which chat is open
+  // Listen globally for incoming calls, regardless of which chat is open.
+  // Keyed only on the user id (not the whole session object or callState)
+  // so this subscription doesn't tear down and rebuild on every token
+  // refresh or call-state change — each resubscribe is a window where an
+  // incoming call-offer broadcast could be missed entirely, since
+  // broadcasts aren't queued for anyone not subscribed at that instant.
+  const myUserId = session?.user.id;
   useEffect(() => {
-    if (!session) return;
-    const myId = session.user.id;
+    if (!myUserId) return;
     const channel = supabase
-      .channel(`user-calls-${myId}`)
+      .channel(`user-calls-${myUserId}`)
       .on('broadcast', { event: 'call-offer' }, ({ payload }: any) => {
         console.log('[call] received call-offer', payload);
-        if (callState) {
+        if (callStateRef.current) {
           // already on a call — let the caller's attempt time out
           return;
         }
@@ -400,10 +407,10 @@ const App: React.FC = () => {
         });
       })
       .subscribe((status) => {
-        console.log('[call] global listener status:', status, `user-calls-${myId}`);
+        console.log('[call] global listener status:', status, `user-calls-${myUserId}`);
       });
     return () => { supabase.removeChannel(channel); };
-  }, [session, callState]);
+  }, [myUserId]);
 
   // Single source of truth for the ring/ring-back tone: play while calling
   // (caller) or ringing (callee), stop the moment that's no longer true.

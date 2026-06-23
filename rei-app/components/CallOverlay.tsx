@@ -35,12 +35,21 @@ const CallOverlay: React.FC<CallOverlayProps> = ({
   // can run (and attach the stream) before that element exists, and won't
   // re-fire once it actually mounts since the stream itself hasn't changed.
   useEffect(() => {
-    if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(() => {});
+    }
   }, [localStream, status]);
 
   useEffect(() => {
-    if (type === 'video' && remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
-    if (type === 'audio' && remoteAudioRef.current) remoteAudioRef.current.srcObject = remoteStream;
+    if (type === 'video' && remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch(() => {});
+    }
+    if (type === 'audio' && remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch(() => {});
+    }
   }, [remoteStream, type, status]);
 
   useEffect(() => {
