@@ -486,13 +486,22 @@ const App: React.FC = () => {
         if (settled) return;
         settled = true;
         console.error(`[call] sendOnce(${channelName}, ${event}) attempt ${attempt} failed to subscribe:`, status);
-        supabase.removeChannel(channel);
-        if (attempt < 6) {
-          setTimeout(() => sendOnce(channelName, event, payload, attempt + 1), 700);
-        } else {
-          setOutgoingCallDebug(`targeting ${channelName} (${event}): FAILED after ${attempt} attempts`);
-          alert(`Could not reach the other person (connection kept dropping). Please try again.`);
-        }
+        supabase.removeChannel(channel).then(() => {
+          if (attempt < 6) {
+            // A repeatedly CLOSED subscribe on a brand-new channel object
+            // usually means the underlying realtime socket itself is stuck,
+            // not just this one channel. Force a clean reconnect of the
+            // socket before trying again instead of just retrying the same
+            // (likely still-broken) connection.
+            if (attempt >= 2) {
+              try { supabase.realtime.disconnect(); } catch {}
+            }
+            setTimeout(() => sendOnce(channelName, event, payload, attempt + 1), 700);
+          } else {
+            setOutgoingCallDebug(`targeting ${channelName} (${event}): FAILED after ${attempt} attempts`);
+            alert(`Could not reach the other person (connection kept dropping). Please try again.`);
+          }
+        });
       }
     });
   };
